@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Navigate to the main directory and install the package
-cd /home/gymuser/MaskedMimic
+cd /home/gymuser/ProtoMotions
 
 # Navigate to isaac_utils and install
 cd isaac_utils
@@ -34,9 +34,9 @@ echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 pip install -e .
 cd ..
 
-# Install the MaskedMimic package
+# Install the ProtoMotions package
 echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-echo "Installing MaskedMimic..."
+echo "Installing ProtoMotions..."
 echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 pip install -e .
 
