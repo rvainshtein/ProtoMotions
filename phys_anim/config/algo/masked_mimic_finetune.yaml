@@ -1,0 +1,18 @@
+# @package _global_
+
+defaults:
+  - mimic_vae_dagger_fabric
+
+algo:
+  _target_: phys_anim.agents.masked_mimic_finetune_fabric.MimicFinetune
+  config:
+    pre_trained_maskedmimic_path: ${pre_trained_maskedmimic_path}
+
+pre_trained_maskedmimic_path: null
+
+# MaskedMimic has unused parameters.
+# We need to investigate why this is the case.
+# For now this flag helps avoid issues in multi-gpu/multi-node training.
+fabric:
+  strategy:
+    find_unused_parameters: true
