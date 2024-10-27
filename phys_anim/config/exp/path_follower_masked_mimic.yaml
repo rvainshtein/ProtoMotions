@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - masked_mimic_fabric
+  - /opt/masked_mimic/tasks: path_follower
+  - override /algo: masked_mimic_finetune
+
+name: masked_mimic_path_follower
+env_path: phys_anim.envs.${backbone}.masked_mimic_inversion.path_following_humanoid.MaskedMimicPathFollowingHumanoid
+
+accel_max: 1
+speed_max: 5
+speed_min: 0.0
+fixed_path: False
+slow: False
+
+start_speed_max: 0.5
+head_change_max: 0.05
+head_height_max: 1.5
+head_height_min: 0.4

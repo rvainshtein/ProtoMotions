@@ -1,0 +1,50 @@
+# @package _global_
+
+defaults:
+  - masked_mimic_dagger_fabric
+  - /env/direction_humanoid
+#  - /opt/masked_mimic/tasks/heading
+  - override /algo: masked_mimic_finetune
+
+#name: masked_mimic_direction
+env_path: phys_anim.envs.${backbone}.masked_mimic_inversion.direction_humanoid.MaskedMimicDirectionHumanoid
+
+direction_obs_size: 3
+task_reward_w: 1.0
+#jd_reward_w: 0.5
+
+heading_change_steps_min: 40
+heading_change_steps_max: 150
+random_heading_probability: 0.2
+standard_heading_change: 1.57  # 90 degrees in radians
+tar_speed_min: 1.2
+tar_speed_max: 6
+standard_speed_change: 0.3
+stop_probability: 0.05
+
+only_bc: False
+bc_coeff: 0
+
+# Append the direction obs to the actor and critic inputs
+direction_model:
+  _target_: phys_anim.agents.models.common.Flatten
+  config:
+    normalize_obs: False
+    obs_clamp_value: ${obs_clamp_value}
+  # Input and output size are the same due to flattening
+  num_in: ${direction_obs_size}
+  num_out: ${direction_obs_size}
+
+critic:
+  config:
+    extra_inputs:
+      direction_obs: ${direction_model}
+
+algo_extra_inputs:
+  direction_obs:
+    retrieve_from_env: True
+    dtype: float
+    size: ${direction_model.num_in}
+
+#env_params:
+#  provide_future_states: True
