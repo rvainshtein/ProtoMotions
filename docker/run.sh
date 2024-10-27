@@ -24,7 +24,7 @@ if [ "$display" != "" ]; then
     -p "${ssh_port}":22 \
     -p "${tensorboard_port}":6006 \
     -v /tmp:/tmp \
-    -v ~/dev/MaskedMimic:/home/gymuser/MaskedMimic \
+    -v ~/dev/ProtoMotions:/home/gymuser/ProtoMotions \
     --gpus all \
     --ipc=host \
     -e HYDRA_FULL_ERROR=1 \
@@ -41,7 +41,7 @@ else
     -e "ACCEPT_EULA=Y" \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
     -e DISPLAY="${DISPLAY}" \
-    -v ~/dev/MaskedMimic:/home/gymuser/MaskedMimic \
+    -v ~/dev/ProtoMotions:/home/gymuser/ProtoMotions \
     --gpus all \
     --ipc=host \
     --volume="$HOME/.Xauthority:/root/.Xauthority:rw" \
