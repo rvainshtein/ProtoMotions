@@ -32,8 +32,12 @@ from isaacgym import gymapi, gymtorch  # type: ignore[misc]
 import torch
 
 from isaac_utils import rotations
-from phys_anim.envs.common.masked_mimic_inversion.common_direction import MaskedMimicBaseDirection
-from phys_anim.envs.isaacgym.masked_mimic_inversion.task_humanoid import MaskedMimicTaskHumanoid
+from phys_anim.envs.masked_mimic_inversion.steering.common import (
+    MaskedMimicBaseDirection,
+)
+from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
+    MaskedMimicTaskHumanoid,
+)
 
 TAR_ACTOR_ID = 1
 

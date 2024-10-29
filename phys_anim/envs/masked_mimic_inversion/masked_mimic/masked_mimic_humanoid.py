@@ -5,13 +5,15 @@ from isaacgym import gymapi, gymtorch
 import torch
 
 from isaac_utils import torch_utils
-from phys_anim.envs.common.common_masked_mimic import BaseMaskedMimic
-from phys_anim.envs.isaacgym.mimic_humanoid import MimicHumanoid
+from phys_anim.envs.masked_mimic.common import BaseMaskedMimic
+from phys_anim.envs.mimic.isaacgym import MimicHumanoid
 from phys_anim.utils.motion_lib import MotionLib
 
 
 class MaskedMimicHumanoid(BaseMaskedMimic, MimicHumanoid):  # type: ignore[misc]
-    def __init__(self, config, device: torch.device, motion_lib: Optional[MotionLib] = None):
+    def __init__(
+        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
+    ):
         super().__init__(config, device)
 
     ###############################################################

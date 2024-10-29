@@ -5,12 +5,12 @@ from torch import Tensor
 
 from typing import Optional
 
-from phys_anim.envs.utils.path_generator import PathGenerator
+from phys_anim.envs.env_utils.path_generator import PathGenerator
 from phys_anim.utils.motion_lib import MotionLib
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from phys_anim.envs.isaacgym.masked_mimic_inversion.path_following_humanoid import (
+    from phys_anim.envs.masked_mimic_inversion.path_follower.isaacgym import (
         MaskedMimicPathFollowingHumanoid,
     )
 else:
@@ -340,9 +340,9 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         #     self.motion_lib.get_mimic_motion_state(flat_ids, flat_times)
         # )
         flat_state = self.motion_lib.get_mimic_motion_state(flat_ids, flat_times)
-        flat_target_pos = flat_state['global_translation']
-        flat_target_rot = flat_state['global_rotation']
-        flat_target_vel = flat_state['global_ang_vel']
+        flat_target_pos = flat_state["global_translation"]
+        flat_target_rot = flat_state["global_rotation"]
+        flat_target_vel = flat_state["global_ang_vel"]
 
         all_env_ids = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
         flat_target_pos = self.transfer_to_env_coordinates(flat_target_pos, all_env_ids)

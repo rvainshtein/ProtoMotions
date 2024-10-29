@@ -1,7 +1,7 @@
 # @package _global_
 
 defaults:
-  - masked_mimic_fabric
+  - masked_mimic
   - /opt/masked_mimic/tasks: path_follower
   - override /algo: masked_mimic_finetune
 

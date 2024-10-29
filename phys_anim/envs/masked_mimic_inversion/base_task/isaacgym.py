@@ -7,14 +7,16 @@
 
 from isaacgym import gymtorch
 
-from phys_anim.envs.common.masked_mimic_inversion.common_task import BaseMaskedMimicTask
+from phys_anim.envs.masked_mimic_inversion.base_task.common import BaseMaskedMimicTask
+
 # from phys_anim.envs.isaacgym.masked_mimic_humanoid import MaskedMimicHumanoid
-from phys_anim.envs.isaacgym.masked_mimic_inversion.masked_mimic_humanoid import MaskedMimicHumanoid
+from phys_anim.envs.masked_mimic_inversion.masked_mimic.masked_mimic_humanoid import (
+    MaskedMimicHumanoid,
+)
+
 
 class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type: ignore[misc]
-    def __init__(
-            self, config, device, motion_lib = None
-    ):
+    def __init__(self, config, device, motion_lib=None):
         config.visualize_markers = False
         super().__init__(config=config, device=device, motion_lib=motion_lib)
 
@@ -37,8 +39,10 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
         env_ids_int32 = self.get_task_actor_ids_for_reset(env_ids)
         if env_ids_int32 is not None:
             self.gym.set_actor_root_state_tensor_indexed(
-                self.sim, gymtorch.unwrap_tensor(self.root_states),
-                gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32)
+                self.sim,
+                gymtorch.unwrap_tensor(self.root_states),
+                gymtorch.unwrap_tensor(env_ids_int32),
+                len(env_ids_int32),
             )
 
     def pre_physics_step(self, actions):

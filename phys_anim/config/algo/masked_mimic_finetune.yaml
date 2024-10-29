@@ -1,14 +1,14 @@
 # @package _global_
 
 defaults:
-  - mimic_vae_dagger_fabric
+  - mimic_vae_dagger
 
 algo:
-  _target_: phys_anim.agents.masked_mimic_finetune_fabric.MimicFinetune
+  _target_: phys_anim.agents.masked_mimic_finetune.MimicFinetune
   config:
     pre_trained_maskedmimic_path: ${pre_trained_maskedmimic_path}
 
-pre_trained_maskedmimic_path: null
+pre_trained_maskedmimic_path: ???
 
 # MaskedMimic has unused parameters.
 # We need to investigate why this is the case.
@@ -16,3 +16,6 @@ pre_trained_maskedmimic_path: null
 fabric:
   strategy:
     find_unused_parameters: true
+
+eval_overrides:
+  pre_trained_maskedmimic_path: null
