@@ -1,5 +1,5 @@
-from phys_anim.agents.mimic_vae_dagger_fabric import MimicVAEDagger
-from phys_anim.envs.common.common_humanoid import Humanoid
+from phys_anim.agents.mimic_vae_dagger import MimicVAEDagger
+from phys_anim.envs.humanoid.common import Humanoid
 from phys_anim.agents.models.actor import ActorFixedSigmaVAE
 
 import torch
