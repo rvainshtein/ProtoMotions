@@ -10,7 +10,7 @@ from phys_anim.utils.motion_lib import MotionLib
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from phys_anim.envs.isaacgym.masked_mimic_inversion.task_humanoid import (
+    from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
         MaskedMimicTaskHumanoid,
     )
 else:

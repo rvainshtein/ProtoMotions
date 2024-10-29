@@ -1,0 +1,45 @@
+# @package _global_
+
+defaults:
+  - masked_mimic
+#  - /opt/masked_mimic/tasks/heading
+  - override /env: steering
+  - override /algo: masked_mimic_finetune
+
+#name: masked_mimic_direction
+env_path: phys_anim.envs.masked_mimic_inversion.steering.${backbone}.MaskedMimicDirectionHumanoid
+
+env:
+  config:
+    task_reward_w: 1.0
+    #jd_reward_w: 0.5
+
+algo:
+  config:
+    only_bc: False
+    bc_coeff: 0
+
+    models:
+      # Append the direction obs to the actor and critic inputs
+      direction_model:
+        _target_: phys_anim.agents.models.common.Flatten
+        config:
+          normalize_obs: False
+          obs_clamp_value: ${obs_clamp_value}
+        # Input and output size are the same due to flattening
+        num_in: ${env.config.steering_params.obs_size}
+        num_out: ${env.config.steering_params.obs_size}
+
+    critic:
+      config:
+        extra_inputs:
+          direction_obs: ${algo.models.direction_model}
+
+    extra_inputs:
+      direction_obs:
+        retrieve_from_env: True
+        dtype: float
+        size: ${algo.models.direction_model.num_in}
+
+#env_params:
+#  provide_future_states: True

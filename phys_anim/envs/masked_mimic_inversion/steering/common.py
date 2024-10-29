@@ -36,7 +36,9 @@ from isaac_utils import rotations, torch_utils
 from phys_anim.utils.motion_lib import MotionLib
 
 if TYPE_CHECKING:
-    from phys_anim.envs.isaacgym.masked_mimic_inversion.direction_humanoid import MaskedMimicDirectionHumanoid
+    from phys_anim.envs.masked_mimic_inversion.steering.isaacgym import (
+        MaskedMimicDirectionHumanoid,
+    )
 else:
     MaskedMimicDirectionHumanoid = object
 
@@ -58,8 +60,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self.direction_obs = torch.zeros(
             (config.num_envs, config.direction_obs_size),
             device=device,
-            dtype=torch.float,)
-
+            dtype=torch.float,
+        )
 
         self._heading_change_steps = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.int64
