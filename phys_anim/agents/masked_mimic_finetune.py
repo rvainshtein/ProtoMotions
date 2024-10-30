@@ -18,12 +18,14 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
 
     def setup(self):
         super().setup()
-        # actor_state_dict = self.actor.state_dict()
-        # if self.config.pre_trained_maskedmimic_path is not None:
-        #    pre_trained_masked_mimic_state_dict = torch.load(self.config.pre_trained_maskedmimic_path, map_location=self.device)
-        #    for key, value in pre_trained_masked_mimic_state_dict.items():
-        #        actor_state_dict[key] = value
-        #    self.actor.load_state_dict(actor_state_dict)
-        #    for name, param in self.actor.named_parameters():
-        #        if name in pre_trained_masked_mimic_state_dict.keys():
-        #            param.requires_grad = False
+        actor_state_dict = self.actor.state_dict()
+        if self.config.pre_trained_maskedmimic_path is not None:
+            pre_trained_masked_mimic_state_dict = torch.load(
+                self.config.pre_trained_maskedmimic_path, map_location=self.device
+            )
+            for key, value in pre_trained_masked_mimic_state_dict.items():
+                actor_state_dict[key] = value
+            self.actor.load_state_dict(actor_state_dict)
+            for name, param in self.actor.named_parameters():
+                if name in pre_trained_masked_mimic_state_dict.keys():
+                    param.requires_grad = False
