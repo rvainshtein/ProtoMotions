@@ -143,6 +143,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
     def compute_observations(self, env_ids=None):
         self.mask_everything()
         super().compute_observations(env_ids)
+        self.mask_everything()
 
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
