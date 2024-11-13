@@ -164,6 +164,9 @@ class TransformerWithNorm(nn.Module):
         )
 
         for key_idx, key in enumerate(self.extra_input_keys):
+            if key not in self.extra_input_keys:
+                continue
+
             key_obs = input_dict[key]
             used_mask_multiply = False
 

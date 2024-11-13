@@ -736,7 +736,7 @@ class PPO:
         # The function fabric.save has to be called on ALL devices. We assert that the new_high_score flag has the same
         # value across all devices. If it is True, we save the model with the best score to the root directory.
         # Make sure to fun an all_gather/broadcast operation to ensure that the flag is the same across all devices.
-        gathered_high_score = self.fabric.all_gather(new_high_score)
+        gathered_high_score = self.fabric.all_gather(torch.tensor([new_high_score], device=self.device))
         assert all(
             [x == gathered_high_score[0] for x in gathered_high_score]
         ), "New high score flag should be the same across all ranks."

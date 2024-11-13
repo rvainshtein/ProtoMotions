@@ -150,7 +150,11 @@ class Mimic(AMP):
         motion_map, remaining_motions = self.map_motions_to_iterations()
         num_outer_iters = len(motion_map)
         # Maximal number of iters any of the ranks needs to perform.
-        max_iters = max(self.fabric.all_gather(len(motion_map)))
+
+        # Wrap len(motion_map) in a tensor so that all_gather returns a 1D tensor
+        gathered_iters = self.fabric.all_gather(torch.tensor([len(motion_map)], device=self.device))
+        max_iters = gathered_iters.max().item()  # Use .max() on the 1D tensor and get the value as a Python int
+
 
         for outer_iter in track(
             range(max_iters),

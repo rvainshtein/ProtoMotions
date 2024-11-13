@@ -7,8 +7,11 @@ algo:
   _target_: phys_anim.agents.masked_mimic_finetune.MimicFinetune
   config:
     pre_trained_maskedmimic_path: ${pre_trained_maskedmimic_path}
+    eval_metric_keys: [ ]
+    max_epochs: ${eval:${training_max_steps}//${num_envs}//${.num_steps}}
 
-pre_trained_maskedmimic_path: ???
+#pre_trained_maskedmimic_path: ???
+pre_trained_maskedmimic_path:
 
 # MaskedMimic has unused parameters.
 # We need to investigate why this is the case.

@@ -9,7 +9,6 @@ from isaacgym import gymtorch
 
 from phys_anim.envs.masked_mimic_inversion.base_task.common import BaseMaskedMimicTask
 
-# from phys_anim.envs.isaacgym.masked_mimic_humanoid import MaskedMimicHumanoid
 from phys_anim.envs.masked_mimic_inversion.masked_mimic.masked_mimic_humanoid import (
     MaskedMimicHumanoid,
 )

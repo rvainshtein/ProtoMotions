@@ -23,9 +23,18 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
             pre_trained_masked_mimic_state_dict = torch.load(
                 self.config.pre_trained_maskedmimic_path, map_location=self.device
             )
-            for key, value in pre_trained_masked_mimic_state_dict.items():
-                actor_state_dict[key] = value
-            self.actor.load_state_dict(actor_state_dict)
+            pre_trained_actor_state_dict = pre_trained_masked_mimic_state_dict['actor']
+            for param_name, param_val in self.actor.state_dict().items():
+                pre_trained_param_val = pre_trained_actor_state_dict.get(param_name)
+                if pre_trained_param_val is not None:
+                    if param_val.shape == pre_trained_param_val.shape:
+                        actor_state_dict[param_name] = pre_trained_param_val
+                    else:
+                        print(f"Shape mismatch: {param_name}")
+                        print(f"Actor shape: {param_val.shape}, Pre-trained shape: {pre_trained_param_val.shape}")
+
+            self.actor.load_state_dict(actor_state_dict,
+                                       strict=False)  # strict=False to allow loading partial state_dict
             for name, param in self.actor.named_parameters():
-                if name in pre_trained_masked_mimic_state_dict.keys():
+                if name in pre_trained_actor_state_dict.keys():
                     param.requires_grad = False

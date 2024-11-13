@@ -13,7 +13,7 @@ algo:
       only_bc: True
       collect_data_with_expert: False
 
-gt_actor_path: ???
+gt_actor_path: null
 
 eval_overrides:
   gt_actor_path: null

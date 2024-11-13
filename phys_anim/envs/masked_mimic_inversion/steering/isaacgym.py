@@ -43,7 +43,7 @@ TAR_ACTOR_ID = 1
 
 
 class MaskedMimicDirectionHumanoid(MaskedMimicBaseDirection, MaskedMimicTaskHumanoid):  # type: ignore[misc]
-    def __init__(self, config, device: torch.device):
+    def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
         super().__init__(config=config, device=device)
 
         if not self.headless:
