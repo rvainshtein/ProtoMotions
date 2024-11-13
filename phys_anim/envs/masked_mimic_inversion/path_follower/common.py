@@ -27,7 +27,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         super().__init__(config=config, device=device, motion_lib=motion_lib)
 
         self.direction_obs = torch.zeros(
-            (self.num_envs, self.config.direction_obs_size),
+            (self.num_envs, config.steering_params.obs_size),
             device=self.device,
             dtype=torch.float,
         )

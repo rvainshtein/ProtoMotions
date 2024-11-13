@@ -112,7 +112,10 @@ class MimicVAEDagger(MimicVAE):
         )
 
         # add BC loss
-        bc_loss = self.bc_loss(batch_dict)
+        if self.config.dagger.bc_coeff == 0:
+            bc_loss = torch.tensor(0.0, device=self.device)
+        else:
+            bc_loss = self.bc_loss(batch_dict)
 
         extra_actor_log_dict["actor/bc_loss"] = bc_loss.detach()
 

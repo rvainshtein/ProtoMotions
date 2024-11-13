@@ -15,8 +15,9 @@ env:
 
 algo:
   config:
-    only_bc: False
-    bc_coeff: 0
+    dagger:
+      only_bc: False
+      bc_coeff: 0
 
     models:
       # Append the direction obs to the actor and critic inputs
@@ -24,7 +25,8 @@ algo:
         _target_: phys_anim.agents.models.common.Flatten
         config:
           normalize_obs: False
-          obs_clamp_value: ${obs_clamp_value}
+#          obs_clamp_value: ${obs_clamp_value}
+          obs_clamp_value: null
         # Input and output size are the same due to flattening
         num_in: ${env.config.steering_params.obs_size}
         num_out: ${env.config.steering_params.obs_size}
@@ -52,7 +54,7 @@ algo:
       prior_pre_processor:  # Transformer inputs
         config:
           extra_inputs:
-            direction_obs: ${algo.models.direction_model_for_transformer}
+            direction_obs: ${algo.config.models.direction_model_for_transformer}
 
     critic:
       _target_: phys_anim.agents.models.critic.CriticMLP
@@ -65,13 +67,13 @@ algo:
         obs_clamp_value: ${algo.config.obs_clamp_value}
         use_layer_norm: False
         extra_inputs:
-          direction_obs: ${algo.models.direction_model}
+          direction_obs: ${algo.config.models.direction_model}
 
     extra_inputs:
       direction_obs:
         retrieve_from_env: True
         dtype: float
-        size: ${algo.models.direction_model.num_in}
+        size: ${algo.config.models.direction_model.num_in}
 
 vae_latent_from_prior: True
 vae_noise_type: zeros

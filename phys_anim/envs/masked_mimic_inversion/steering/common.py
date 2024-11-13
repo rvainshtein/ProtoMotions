@@ -47,18 +47,18 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
     def __init__(self, config, device: torch.device):
         super().__init__(config=config, device=device)
 
-        self._tar_speed_min = self.config.tar_speed_min
-        self._tar_speed_max = self.config.tar_speed_max
+        self._tar_speed_min = self.config.steering_params.tar_speed_min
+        self._tar_speed_max = self.config.steering_params.tar_speed_max
 
-        self._heading_change_steps_min = self.config.heading_change_steps_min
-        self._heading_change_steps_max = self.config.heading_change_steps_max
-        self._random_heading_probability = self.config.random_heading_probability
-        self._standard_heading_change = self.config.standard_heading_change
-        self._standard_speed_change = self.config.standard_speed_change
-        self._stop_probability = self.config.stop_probability
+        self._heading_change_steps_min = self.config.steering_params.change_steps_min
+        self._heading_change_steps_max = self.config.steering_params.change_steps_max
+        self._random_heading_probability = self.config.steering_params.random_heading_probability
+        self._standard_heading_change = self.config.steering_params.standard_heading_change
+        self._standard_speed_change = self.config.steering_params.standard_speed_change
+        self._stop_probability = self.config.steering_params.stop_probability
 
         self.direction_obs = torch.zeros(
-            (config.num_envs, config.direction_obs_size),
+            (config.num_envs, config.steering_params.obs_size),
             device=device,
             dtype=torch.float,
         )
@@ -166,6 +166,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             root_pos, self._prev_root_pos, self._tar_dir, self._tar_speed, self.dt
         )
         self._prev_root_pos[:] = root_pos
+
+        # other_log_terms = {
+        #     "total_rew": self.rew_buf,
+        # }
+        #
+        # for rew_name, rew in other_log_terms.items():
+        #     self.log_dict[f"{rew_name}_mean"] = rew.mean()
+        #     self.log_dict[f"{rew_name}_std"] = rew.std()
+        #
+        # self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
+        # self.last_other_rewards = other_log_terms
 
 
 #####################################################################
