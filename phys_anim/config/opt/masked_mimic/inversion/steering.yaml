@@ -1,8 +1,7 @@
 # @package _global_
 
 env:
-  _target_: phys_anim.envs.masked_mimic_inversion.steering.${backbone}.MaskedMimicDirectionHumanoid
-#  _target_: phys_anim.envs.masked_mimic.tasks.steering.${backbone}.MaskedMimicSteeringHumanoid
+  _target_: phys_anim.envs.masked_mimic_inversion.steering.${backbone}.SteeringHumanoid
   config:
     steering_params:
       heading_change_steps_min: 40

@@ -1,0 +1,18 @@
+# @package _global_
+
+algo:
+  config:
+    extra_inputs: null
+    models:
+      prior_pre_processor:
+        config:
+          extra_inputs: null
+    actor:
+      config:
+        mu_model:
+          config:
+            extra_inputs: null
+#    models:
+#      prior_pre_processor:
+#        config:
+#          extra_inputs: null
