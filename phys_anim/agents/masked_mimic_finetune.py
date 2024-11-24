@@ -36,5 +36,6 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
             self.actor.load_state_dict(actor_state_dict,
                                        strict=False)  # strict=False to allow loading partial state_dict
             for name, param in self.actor.named_parameters():
-                if name in pre_trained_actor_state_dict.keys():
+                fixed_name = name.replace("_forward_module.", "")
+                if fixed_name in pre_trained_actor_state_dict:
                     param.requires_grad = False
