@@ -9,10 +9,17 @@ algo:
     pre_trained_maskedmimic_path: ${pre_trained_maskedmimic_path}
     eval_metric_keys: [ ]
     max_epochs: ${eval:${training_max_steps}//${num_envs}//${.num_steps}}
-
+    dagger:
+      only_bc: False
+      bc_coeff: 0
 env:
   config:
     mimic_early_termination: null
+    task_reward_w: 1.0
+
+# No VAE random sampling for finetuning
+vae_latent_from_prior: True
+vae_noise_type: zeros
 
 pre_trained_maskedmimic_path: data/pretrained_models/MaskedMimic/last.ckpt
 
