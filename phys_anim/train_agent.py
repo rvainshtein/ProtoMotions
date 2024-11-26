@@ -58,6 +58,7 @@ for arg in sys.argv:
 
 import torch  # noqa: E402
 from lightning.fabric import Fabric  # noqa: E402
+from wandb.integration.lightning.fabric.logger import WandbLogger
 from utils.config_utils import *  # noqa: E402, F403
 from utils.common import seeding
 
@@ -80,9 +81,9 @@ def main(config: OmegaConf):
     autoresume = SlurmAutoResume()
     id = autoresume.details.get("id")
     if (
-        id is not None
-        and "wandb" in config
-        and OmegaConf.select(config, "wandb.wandb_id", default=None) is None
+            id is not None
+            and "wandb" in config
+            and OmegaConf.select(config, "wandb.wandb_id", default=None) is None
     ):
         config = OmegaConf.merge(config, OmegaConf.create({"wandb": {"wandb_id": id}}))
 
@@ -90,6 +91,14 @@ def main(config: OmegaConf):
 
     fabric: Fabric = instantiate(config.fabric)
     fabric.launch()
+
+    resolved_config = OmegaConf.to_container(config, resolve=True)
+    # Log the Hydra config to WandB
+    if fabric.global_rank == 0:
+        if "wandb" in config:
+            for logger in fabric.loggers:
+                if isinstance(logger, WandbLogger):
+                    logger.config = resolved_config  # Log Hydra configuration
 
     if config.seed is not None:
         rank = fabric.global_rank
