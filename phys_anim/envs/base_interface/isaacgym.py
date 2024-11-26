@@ -228,7 +228,7 @@ class GymBaseInterface(BaseInterface, Humanoid):  # type: ignore[misc]
                     video = cv2.VideoWriter(
                         str(self.curr_user_recording_name) + ".mp4",
                         fourcc,
-;                        30,
+                        30,
                         (width, height),
                     )
 

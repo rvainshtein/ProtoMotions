@@ -2,8 +2,8 @@
 
 defaults:
   - masked_mimic
-  - /opt/masked_mimic/inversion/steering
   - /opt/clear_critic
+  - /opt/masked_mimic/inversion/steering
   - /algo/masked_mimic_finetune
 
 name: masked_mimic_inversion_steering
