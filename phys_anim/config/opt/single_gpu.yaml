@@ -1,0 +1,8 @@
+# @package _global_
+
+ngpu: 1
+fabric:
+  strategy:
+    _target_: lightning.fabric.strategies.SingleDeviceStrategy
+#    find_unused_parameters: null
+    device: 0
