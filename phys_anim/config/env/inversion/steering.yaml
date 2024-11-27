@@ -18,3 +18,4 @@ env:
       enable_rand_heading: True
       obs_size: 3
       log_speed: False
+      use_current_pose_obs: False
