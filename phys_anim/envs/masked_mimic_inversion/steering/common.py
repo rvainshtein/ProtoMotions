@@ -56,12 +56,20 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._standard_heading_change = self.config.steering_params.standard_heading_change
         self._standard_speed_change = self.config.steering_params.standard_speed_change
         self._stop_probability = self.config.steering_params.stop_probability
+        self.use_current_pose_obs = config.steering_params.get("use_current_pose_obs", False)
 
-        self.direction_obs = torch.zeros(
-            (config.num_envs, config.steering_params.obs_size),
-            device=device,
-            dtype=torch.float,
-        )
+        if self.use_current_pose_obs:
+            self.direction_obs = torch.zeros(
+                (config.num_envs, config.steering_params.obs_size + self.get_obs_size()),
+                device=device,
+                dtype=torch.float,
+            )
+        else:
+            self.direction_obs = torch.zeros(
+                (config.num_envs, config.steering_params.obs_size),
+                device=device,
+                dtype=torch.float,
+            )
 
         self._heading_change_steps = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.int64
@@ -156,8 +164,11 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             root_states = self.get_humanoid_root_states()[env_ids]
             tar_dir = self._tar_dir[env_ids]
             tar_speed = self._tar_speed[env_ids]
+            humanoid_obs = self.obs_buf[env_ids]
 
         obs = compute_heading_observations(root_states, tar_dir, tar_speed, self.w_last)
+        if self.use_current_pose_obs:
+            obs = torch.cat([obs, humanoid_obs], dim=-1)
         self.direction_obs[env_ids] = obs
 
     def compute_reward(self, actions):

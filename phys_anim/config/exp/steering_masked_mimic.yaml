@@ -6,4 +6,4 @@ defaults:
   - /opt/masked_mimic/inversion/steering
   - /algo/masked_mimic_finetune
 
-name: masked_mimic_inversion_steering
+experiment_name: masked_mimic_inversion_steering
