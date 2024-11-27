@@ -92,14 +92,6 @@ def main(config: OmegaConf):
     fabric: Fabric = instantiate(config.fabric)
     fabric.launch()
 
-    resolved_config = OmegaConf.to_container(config, resolve=True)
-    # Log the Hydra config to WandB
-    if fabric.global_rank == 0:
-        if "wandb" in config:
-            for logger in fabric.loggers:
-                if isinstance(logger, WandbLogger):
-                    logger.config = resolved_config  # Log Hydra configuration
-
     if config.seed is not None:
         rank = fabric.global_rank
         if rank is None:
@@ -128,6 +120,15 @@ def main(config: OmegaConf):
     print(f"Saving config file to {save_dir}")
     with open(save_dir / "config.yaml", "w") as file:
         OmegaConf.save(unresolved_conf, file)
+
+    resolved_config = OmegaConf.to_container(config, resolve=True)
+    # Log the Hydra config to WandB
+    if fabric.global_rank == 0:
+        if "wandb" in config:
+            for logger in fabric.loggers:
+                if isinstance(logger, WandbLogger):
+                    logger.config = resolved_config  # Log Hydra configuration
+                    logger.log_hyperparams(resolved_config)
 
     algo.fit()
 
