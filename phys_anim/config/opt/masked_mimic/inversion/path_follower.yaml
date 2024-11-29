@@ -6,20 +6,4 @@ defaults:
 algo:
   config:
     models:
-      extra_input_obs_size: ${env.config.path_follower_params.path_obs_size}
-
-      prior_pre_processor:  # Transformer inputs
-        config:
-          extra_inputs:
-            path_obs: ${algo.config.models.extra_input_model_for_transformer}
-
-    critic:
-      config:
-        extra_inputs:
-          path_obs: ${algo.config.models.extra_input_model}
-
-    extra_inputs:
-      path_obs:
-        retrieve_from_env: True
-        dtype: float
-        size: ${algo.config.models.extra_input_model.num_in}
+      extra_input_obs_size: ${env.config.path_follower_params.path_obs_size

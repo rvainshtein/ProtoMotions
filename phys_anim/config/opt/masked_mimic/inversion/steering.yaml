@@ -8,19 +8,3 @@ algo:
   config:
     models:
       extra_input_obs_size: ${env.config.steering_params.obs_size}
-
-      prior_pre_processor:  # Transformer inputs
-        config:
-          extra_inputs:
-            direction_obs: ${algo.config.models.extra_input_model_for_transformer}
-
-    critic:
-      config:
-        extra_inputs:
-          direction_obs: ${algo.config.models.extra_input_model}
-
-    extra_inputs:
-      direction_obs:
-        retrieve_from_env: True
-        dtype: float
-        size: ${algo.config.models.extra_input_model.num_in}

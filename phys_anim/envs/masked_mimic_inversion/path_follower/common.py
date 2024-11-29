@@ -30,7 +30,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         self.head_body_id = self.get_body_id('Head')
 
-        self.path_obs = torch.zeros(
+        self.path_obs = self.inversion_obs = torch.zeros(
             (
                 self.config.num_envs,
                 self.config.path_follower_params.path_obs_size,
@@ -217,6 +217,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         )
 
         self.path_obs[env_ids] = obs
+        self.inversion_obs = self.path_obs
 
     ###############################################################
     # Helpers

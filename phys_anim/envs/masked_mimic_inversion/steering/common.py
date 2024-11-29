@@ -71,6 +71,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
                 dtype=torch.float,
             )
 
+        self.inversion_obs = self.direction_obs
+
         self._heading_change_steps = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.int64
         )
@@ -171,6 +173,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         if self.use_current_pose_obs:
             obs = torch.cat([obs, humanoid_obs], dim=-1)
         self.direction_obs[env_ids] = obs
+        self.inversion_obs = self.direction_obs
 
     def compute_reward(self, actions):
         root_pos = self.get_humanoid_root_states()[..., :3]

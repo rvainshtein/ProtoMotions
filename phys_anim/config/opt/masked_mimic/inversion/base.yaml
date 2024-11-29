@@ -36,8 +36,8 @@ algo:
 
       prior_pre_processor:  # Transformer inputs
         config:
-          extra_inputs: ???
-            # {obs_name}: ${algo.config.models.extra_input_model_for_transformer}
+          extra_inputs:
+            inversion_obs: ${algo.config.models.extra_input_model_for_transformer}
 
     critic:
       _target_: phys_anim.agents.models.critic.CriticMLP
@@ -49,11 +49,11 @@ algo:
         normalize_obs: ${algo.config.normalize_obs}
         obs_clamp_value: ${algo.config.obs_clamp_value}
         use_layer_norm: False
-        extra_inputs: ???
-          # {obs_name}: ${algo.config.models.extra_input_model}
+        extra_inputs:
+           inversion_obs: ${algo.config.models.extra_input_model}
 
-    extra_inputs: ???
-        # {obs_name}:
-        #   retrieve_from_env: True
-        #   dtype: float
-        #   size: ${algo.config.models.extra_input_model.num_in}
+    extra_inputs:
+         inversion_obs:
+           retrieve_from_env: True
+           dtype: float
+           size: ${algo.config.models.extra_input_model.num_in}
