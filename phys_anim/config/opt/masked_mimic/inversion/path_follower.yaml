@@ -6,4 +6,4 @@ defaults:
 algo:
   config:
     models:
-      extra_input_obs_size: ${env.config.path_follower_params.path_obs_size
+      extra_input_obs_size: ${env.config.path_follower_params.path_obs_size}

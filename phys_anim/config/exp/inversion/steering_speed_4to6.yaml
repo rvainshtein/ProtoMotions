@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - /exp/inversion/steering
+
+env:
+    config:
+        steering_params:
+          tar_speed_min: 4
+          tar_speed_max: 6
+
+experiment_name: inversion_steering_speed_4to6
