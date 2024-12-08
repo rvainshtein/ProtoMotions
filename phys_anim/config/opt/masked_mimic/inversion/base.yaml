@@ -58,5 +58,11 @@ algo:
            dtype: float
            size: ${algo.config.models.extra_input_model.num_in}
 
+env:
+  config:
+    mimic_reset_track:
+      reset_on_episode_reset: False
+      reset_episode_on_reset_track: False
+
 wandb:
   wandb_tags: [inversion]
