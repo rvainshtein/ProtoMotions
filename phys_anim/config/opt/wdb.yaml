@@ -13,10 +13,3 @@ fabric:
       id: ${wandb.wandb_id}
       entity: ${wandb.wandb_entity}
       resume: allow
-
-wandb:
-  wandb_project: physical_animation
-  wandb_tags: null
-  wandb_group: null
-  wandb_id: null
-  wandb_entity: null
