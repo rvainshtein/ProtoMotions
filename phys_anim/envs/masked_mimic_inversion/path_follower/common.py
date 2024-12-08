@@ -19,18 +19,16 @@ else:
 
 class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: ignore[misc]
     def __init__(
-            self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
+        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
     ):
-        self.config = config
-        self._num_traj_samples = config.path_follower_params.num_traj_samples
-        self._traj_sample_timestep = config.path_follower_params.traj_sample_timestep
-        self.max_episode_length = config.max_episode_length
-
         super().__init__(config=config, device=device, motion_lib=motion_lib)
 
-        self.head_body_id = self.get_body_id('Head')
+        self._num_traj_samples = self.config.path_follower_params.num_traj_samples
+        self._traj_sample_timestep = (
+            self.config.path_follower_params.traj_sample_timestep
+        )
 
-        self.path_obs = self.inversion_obs = torch.zeros(
+        self.path_obs = torch.zeros(
             (
                 self.config.num_envs,
                 self.config.path_follower_params.path_obs_size,
@@ -38,141 +36,70 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             device=device,
             dtype=torch.float,
         )
+        self.inversion_obs = self.direction_obs
 
-        # self.direction_obs = torch.zeros(
-        #     (self.num_envs, config.steering_params.obs_size),
-        #     device=self.device,
-        #     dtype=torch.float,
-        # )
+        self._fail_dist = 4.0
+        self._fail_height_dist = 0.5
 
         self.build_path_generator()
         self.reset_path_ids = torch.arange(
             self.num_envs, dtype=torch.long, device=self.device
         )
 
-        self.condition_body_part = "Head"
-
-        self._failures = []
-        self._distances = []
-        self._current_accumulated_errors = (
-                torch.zeros([self.num_envs], device=self.device, dtype=torch.float) - 1
-        )
-        self._current_failures = torch.zeros(
-            [self.num_envs], device=self.device, dtype=torch.float
-        )
-        self._last_reset_time = torch.zeros(
-            [self.num_envs], device=self.device, dtype=torch.long
-        )
-        self._last_length = torch.zeros(
-            [self.num_envs], device=self.device, dtype=torch.long
-        )
-
-        self._use_text = True
-        self._text_embedding = None
-        if self._use_text:
-            from transformers import AutoTokenizer, XCLIPTextModel
-
-            model = XCLIPTextModel.from_pretrained("microsoft/xclip-base-patch32")
-            tokenizer = AutoTokenizer.from_pretrained("microsoft/xclip-base-patch32")
-
-            # text_command = ["the person gets on their hand and knees and crawls around"]
-            # text_command = ["a person raises both hands and walks forward"]
-            # text_command = ["swinging arms up and down"]
-            text_command = ["a person walks casually"]
-            with torch.inference_mode():
-                inputs = tokenizer(
-                    text_command, padding=True, truncation=True, return_tensors="pt"
-                )
-                outputs = model(**inputs)
-                pooled_output = outputs.pooler_output  # pooled (EOS token) states
-                self._text_embedding = pooled_output[0].to(self.device)
-
     ###############################################################
     # Handle resets
     ###############################################################
     def reset_task(self, env_ids):
-        if len(env_ids) > 0:
-            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
-            active_envs = self._current_accumulated_errors[env_ids] > 0
-            average_distances = (
-                    self._current_accumulated_errors[env_ids][active_envs]
-                    / self._last_length[env_ids][active_envs]
-            )
-            self._distances.extend(average_distances.cpu().tolist())
-            self._current_accumulated_errors[env_ids] = 0
-            self._failures.extend(
-                (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
-            )
-            self._current_failures[env_ids] = 0
-
         super().reset_task(env_ids)
         self.reset_path_ids = env_ids
-
-    def store_motion_data(self, skip=False):
-        super().store_motion_data(skip=True)
-        if skip:
-            return
-
-        if "target_poses" not in self.motion_recording:
-            self.motion_recording["target_poses"] = []
-
-        traj_samples = self.fetch_path_samples(time_offset=0)[0].clone()
-        self._marker_pos[:] = traj_samples
-        if not self.config.path_follower_params.path_generator.height_conditioned:
-            self._marker_pos[..., 2] = 0.92  # CT hack
-
-        ground_below_marker = self.get_ground_heights(
-            traj_samples[..., :2].view(-1, 2)
-        ).view(traj_samples.shape[:-1])
-
-        self._marker_pos[..., 2] += ground_below_marker
-
-        self.motion_recording["target_poses"].append(
-            self._marker_pos[:].view(self.num_envs, -1, 3).cpu().numpy()
-        )
 
     ###############################################################
     # Environment step logic
     ###############################################################
     def compute_reward(self, actions):
-        super().compute_reward(actions)
-
-        body_part = self.gym.find_asset_rigid_body_index(
-            self.humanoid_asset, self.condition_body_part
-        )
-        current_state = self.get_bodies_state()
-        cur_gt = current_state.body_pos
-
-        cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
-            self.num_envs, 1, 1
-        )
+        bodies_positions = self.get_body_positions()
+        head_position = bodies_positions[:, self.head_body_id, :]
 
         time = self.progress_buf * self.dt
         env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
-        tar_pos = self.path_generator.calc_pos(env_ids, time).clone()
+        tar_pos = self.path_generator.calc_pos(env_ids, time)
 
-        distance_to_target = torch.norm(
-            cur_gt[:, body_part, :3] - tar_pos[:, :3], dim=-1
-        ).view(self.num_envs)
+        ground_below_head = torch.min(bodies_positions, dim=1).values[..., 2]
+        head_position[..., 2] -= ground_below_head.view(-1)
 
-        warmup_passed = self.progress_buf > 10  # 10 frames
+        self.rew_buf[:] = compute_path_reward(
+            head_position, tar_pos, self.config.path_follower_params.height_conditioned
+        )
 
-        self._current_accumulated_errors[warmup_passed] += distance_to_target[
-            warmup_passed
-        ]
-        self._current_failures[warmup_passed] += distance_to_target[warmup_passed] > 2.0
-        self._last_length[warmup_passed] = self.progress_buf[warmup_passed]
+    def compute_reset(self):
+        time = self.progress_buf * self.dt
+        env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        tar_pos = self.path_generator.calc_pos(env_ids, time)
 
-        self._current_accumulated_errors[~warmup_passed] = 0
-        self._current_failures[~warmup_passed] = 0
+        bodies_positions = self.get_body_positions()
+        bodies_contact_buf = self.get_bodies_contact_buf()
 
-        if len(self._failures) > 0:
-            self.last_other_rewards["reach_success"] = 1.0 - sum(self._failures) / len(
-                self._failures
-            )
-            self.last_other_rewards["reach_distance"] = sum(self._distances) / len(
-                self._distances
-            )
+        bodies_positions[..., 2] -= (
+            torch.min(bodies_positions, dim=1).values[:, 2].view(-1, 1)
+        )
+
+        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(
+            self.reset_buf,
+            self.progress_buf,
+            bodies_contact_buf,
+            self.non_termination_contact_body_ids,
+            bodies_positions,
+            tar_pos,
+            self.config.max_episode_length,
+            self._fail_dist,
+            self._fail_height_dist,
+            self.config.enable_height_termination,
+            self.config.path_follower_params.enable_path_termination,
+            self.config.path_follower_params.height_conditioned,
+            self.termination_heights
+            + self.get_ground_heights(bodies_positions[:, self.head_body_id, :2]),
+            self.head_body_id,
+        )
 
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
@@ -192,8 +119,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
             reset_head_position = bodies_positions[
-                                  self.reset_path_ids, self.head_body_id, :
-                                  ]
+                self.reset_path_ids, self.head_body_id, :
+            ]
             flat_reset_head_position = reset_head_position.view(-1, 3)
             ground_below_reset_head = self.get_ground_heights(
                 bodies_positions[:, self.head_body_id, :2]
@@ -260,244 +187,14 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         return traj_samples
 
-    def build_sparse_target_path_poses(
-            self, raw_future_times, target_root_pos, target_root_rot
-    ):
-        """
-        This is identical to the max_coords humanoid observation, only in relative to the current pose.
-        """
-        num_future_steps = raw_future_times.shape[1]
-
-        motion_ids = self.motion_ids.unsqueeze(-1).tile([1, num_future_steps])
-        flat_ids = motion_ids.view(-1)
-
-        lengths = self.motion_lib.get_motion_length(flat_ids)
-
-        flat_times = torch.minimum(raw_future_times.view(-1), lengths)
-
-        ref_state = self.motion_lib.get_mimic_motion_state(flat_ids, flat_times)
-        flat_target_pos, flat_target_rot, flat_target_vel = (
-            ref_state.rb_pos,
-            ref_state.rb_rot,
-            ref_state.rb_vel,
-        )
-
-        current_state = self.get_bodies_state()
-        cur_gt, cur_gr = current_state.body_pos, current_state.body_rot
-        # First remove the height based on the current terrain, then remove the offset to get back to the ground-truth data position
-        cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
-            self.num_envs, 1, 1
-        )
-
-        # override to set the target root parameters
-        reshaped_target_pos = flat_target_pos.reshape(
-            self.num_envs, num_future_steps, -1, 3
-        )
-        reshaped_target_rot = flat_target_rot.reshape(
-            self.num_envs, num_future_steps, -1, 4
-        )
-
-        body_part = self.gym.find_asset_rigid_body_index(
-            self.humanoid_asset, self.condition_body_part
-        )
-
-        reshaped_target_pos[:, :, body_part, :3] = target_root_pos[..., :3]
-        reshaped_target_rot[:, :, body_part] = target_root_rot[:]
-
-        # reshaped_target_pos[:, :, body_part, -1] = 0.92  # standing up
-
-        flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
-        flat_target_rot = reshaped_target_rot.reshape(flat_target_rot.shape)
-        # override to set the target root parameters
-
-        expanded_body_pos = cur_gt.unsqueeze(1).expand(
-            self.num_envs, num_future_steps, *cur_gt.shape[1:]
-        )
-        expanded_body_rot = cur_gr.unsqueeze(1).expand(
-            self.num_envs, num_future_steps, *cur_gr.shape[1:]
-        )
-
-        flat_cur_pos = expanded_body_pos.reshape(flat_target_pos.shape)
-        flat_cur_rot = expanded_body_rot.reshape(flat_target_rot.shape)
-
-        root_pos = flat_cur_pos[:, 0, :]
-        root_rot = flat_cur_rot[:, 0, :]
-
-        heading_rot = torch_utils.calc_heading_quat_inv(root_rot, self.w_last)
-
-        heading_rot_expand = heading_rot.unsqueeze(-2)
-        heading_rot_expand = heading_rot_expand.repeat((1, flat_cur_pos.shape[1], 1))
-        flat_heading_rot = heading_rot_expand.reshape(
-            heading_rot_expand.shape[0] * heading_rot_expand.shape[1],
-            heading_rot_expand.shape[2],
-        )
-
-        root_pos_expand = root_pos.unsqueeze(-2)
-
-        """target"""
-        # target body pos   [N, 3xB]
-        target_rel_body_pos = flat_target_pos - flat_cur_pos
-        flat_target_rel_body_pos = target_rel_body_pos.reshape(
-            target_rel_body_pos.shape[0] * target_rel_body_pos.shape[1],
-            target_rel_body_pos.shape[2],
-        )
-        flat_target_rel_body_pos = torch_utils.quat_rotate(
-            flat_heading_rot, flat_target_rel_body_pos, self.w_last
-        )
-
-        # target body pos   [N, 3xB]
-        flat_target_body_pos = (flat_target_pos - root_pos_expand).reshape(
-            flat_target_pos.shape[0] * flat_target_pos.shape[1],
-            flat_target_pos.shape[2],
-        )
-        flat_target_body_pos = torch_utils.quat_rotate(
-            flat_heading_rot, flat_target_body_pos, self.w_last
-        )
-
-        # target body rot   [N, 6xB]
-        target_rel_body_rot = rotations.quat_mul(
-            rotations.quat_conjugate(flat_cur_rot, self.w_last),
-            flat_target_rot,
-            self.w_last,
-        )
-        target_rel_body_rot_obs = torch_utils.quat_to_tan_norm(
-            target_rel_body_rot.view(-1, 4), self.w_last
-        ).view(target_rel_body_rot.shape[0], -1)
-
-        # target body rot   [N, 6xB]
-        target_body_rot = rotations.quat_mul(
-            heading_rot_expand, flat_target_rot, self.w_last
-        )
-        target_body_rot_obs = torch_utils.quat_to_tan_norm(
-            target_body_rot.view(-1, 4), self.w_last
-        ).view(target_rel_body_rot.shape[0], -1)
-
-        padded_flat_target_rel_body_pos = torch.nn.functional.pad(
-            flat_target_rel_body_pos, [0, 3], "constant", 0
-        )
-        sub_sampled_target_rel_body_pos = padded_flat_target_rel_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
-        )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
-        padded_flat_target_body_pos = torch.nn.functional.pad(
-            flat_target_body_pos, [0, 3], "constant", 0
-        )
-        sub_sampled_target_body_pos = padded_flat_target_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
-        )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
-        sub_sampled_target_rel_body_rot_obs = target_rel_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
-        )[:, :, self.masked_mimic_conditionable_bodies_ids]
-        sub_sampled_target_body_rot_obs = target_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
-        )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
-        # Heading
-        target_heading_rot = torch_utils.calc_heading_quat(
-            flat_target_rot[:, 0, :], self.w_last
-        )
-        target_rel_heading_rot = torch_utils.quat_to_tan_norm(
-            rotations.quat_mul(
-                heading_rot_expand[:, 0, :], target_heading_rot, self.w_last
-            ).view(-1, 4),
-            self.w_last,
-        ).reshape(self.num_envs, num_future_steps, 1, 6)
-
-        # Velocity
-        target_root_vel = flat_target_vel[:, 0, :]
-        target_root_vel[..., -1] = 0  # ignore vertical speed
-        target_rel_vel = rotations.quat_rotate(
-            heading_rot, target_root_vel, self.w_last
-        ).reshape(-1, 3)
-        padded_target_rel_vel = torch.nn.functional.pad(
-            target_rel_vel, [0, 3], "constant", 0
-        )
-        padded_target_rel_vel = padded_target_rel_vel.reshape(
-            self.num_envs, num_future_steps, 1, 6
-        )
-
-        heading_and_velocity = torch.cat(
-            [
-                target_rel_heading_rot,
-                target_rel_heading_rot,
-                padded_target_rel_vel,
-                padded_target_rel_vel,
-            ],
-            dim=-1,
-        )
-
-        # In masked_mimic allow easy re-shape to [batch, time, joint, type (transform/rotate), features]
-        obs = torch.cat(
-            (
-                sub_sampled_target_rel_body_pos,
-                sub_sampled_target_body_pos,
-                sub_sampled_target_rel_body_rot_obs,
-                sub_sampled_target_body_rot_obs,
-            ),
-            dim=-1,
-        )  # [batch, timesteps, joints, 24]
-        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(self.num_envs, -1)
-
-        return obs
-
-    def build_sparse_target_path_poses_masked_with_time(
-            self, target_root_pos: Tensor, target_root_rot: Tensor
-    ):
-        num_future_steps = target_root_pos.shape[1] - 1
-        time_offsets = (
-                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-                * self.dt
-        )
-
-        near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
-        all_future_times = torch.cat(
-            [near_future_times, self.target_pose_time.view(-1, 1)], dim=1
-        )
-
-        obs = self.build_sparse_target_path_poses(
-            all_future_times, target_root_pos, target_root_rot
-        ).view(
-            self.num_envs,
-            num_future_steps + 1,
-            self.masked_mimic_conditionable_bodies_ids.shape[0] + 1,
-            2,
-            12,
-        )
-
-        near_mask = self.masked_mimic_target_bodies_masks.view(
-            self.num_envs, num_future_steps, self.num_conditionable_bodies, 2, 1
-        )
-        far_mask = self.target_pose_joints.view(self.num_envs, 1, -1, 2, 1)
-        mask = torch.cat([near_mask, far_mask], dim=1)
-
-        masked_obs = obs * mask
-
-        masked_obs_with_joints = torch.cat((masked_obs, mask), dim=-1).view(
-            self.num_envs, num_future_steps + 1, -1
-        )
-
-        times = all_future_times.view(-1).view(
-            self.num_envs, num_future_steps + 1, 1
-        ) - self.motion_times.view(self.num_envs, 1, 1)
-        ones_vec = torch.ones(
-            self.num_envs, num_future_steps + 1, 1, device=self.device
-        )
-        times_with_mask = torch.cat((times, ones_vec), dim=-1)
-        combined_sparse_future_pose_obs = torch.cat(
-            (masked_obs_with_joints, times_with_mask), dim=-1
-        )
-
-        return combined_sparse_future_pose_obs.view(self.num_envs, -1)
-
 
 @torch.jit.script
 def compute_path_observations(
-        root_states: Tensor,
-        head_states: Tensor,
-        traj_samples: Tensor,
-        w_last: bool,
-        height_conditioned: bool,
+    root_states: Tensor,
+    head_states: Tensor,
+    traj_samples: Tensor,
+    w_last: bool,
+    height_conditioned: bool,
 ) -> Tensor:
     root_rot = root_states[:, 3:7]
     heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
@@ -532,3 +229,93 @@ def compute_path_observations(
         (traj_samples.shape[0], traj_samples.shape[1] * local_traj_pos.shape[1]),
     )
     return obs
+
+
+@torch.jit.script
+def compute_path_reward(head_pos, tar_pos, height_conditioned):
+    # type: (Tensor, Tensor, bool) -> Tensor
+    pos_err_scale = 2.0
+    height_err_scale = 10.0
+
+    pos_diff = tar_pos[..., 0:2] - head_pos[..., 0:2]
+    pos_err = torch.sum(pos_diff * pos_diff, dim=-1)
+    height_diff = tar_pos[..., 2] - head_pos[..., 2]
+    height_err = height_diff * height_diff
+
+    pos_reward = torch.exp(-pos_err_scale * pos_err)
+    height_reward = torch.exp(-height_err_scale * height_err)
+
+    if height_conditioned:
+        reward = (pos_reward + height_reward) * 0.5
+    else:
+        reward = pos_reward
+
+    return reward
+
+
+@torch.jit.script
+def compute_humanoid_reset(
+    reset_buf,
+    progress_buf,
+    contact_buf,
+    non_termination_contact_body_ids,
+    rigid_body_pos,
+    tar_pos,
+    max_episode_length,
+    fail_dist,
+    fail_height_dist,
+    enable_early_termination,
+    enable_path_termination,
+    enable_height_termination,
+    termination_heights,
+    head_body_id,
+):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, bool, bool, bool, Tensor, int) -> Tuple[Tensor, Tensor]
+    terminated = torch.zeros_like(reset_buf)
+
+    if enable_early_termination:
+        masked_contact_buf = contact_buf.clone()
+        masked_contact_buf[:, non_termination_contact_body_ids, :] = 0
+        fall_contact = torch.any(torch.abs(masked_contact_buf) > 0.1, dim=-1)
+        fall_contact = torch.any(fall_contact, dim=-1)
+
+        body_height = rigid_body_pos[..., 2]
+        fall_height = body_height < termination_heights
+        fall_height[:, non_termination_contact_body_ids] = False
+        fall_height = torch.any(fall_height, dim=-1)
+
+        has_fallen = torch.logical_and(fall_contact, fall_height)
+        # first timestep can sometimes still have nonzero contact forces
+        # so only check after first couple of steps
+        has_fallen *= progress_buf > 1
+    else:
+        has_fallen = progress_buf < -1
+
+    if enable_path_termination:
+        head_pos = rigid_body_pos[..., head_body_id, :]
+        tar_delta = tar_pos - head_pos
+        tar_dist_sq = torch.sum(tar_delta * tar_delta, dim=-1)
+        tar_overall_fail = tar_dist_sq > fail_dist * fail_dist
+
+        if enable_height_termination:
+            tar_height = tar_pos[..., 2]
+            height_delta = tar_height - head_pos[..., 2]
+            tar_head_dist_sq = height_delta * height_delta
+            tar_height_fail = tar_head_dist_sq > fail_height_dist * fail_height_dist
+            tar_height_fail *= progress_buf > 20
+
+            tar_fail = torch.logical_or(tar_overall_fail, tar_height_fail)
+        else:
+            tar_fail = tar_overall_fail
+    else:
+        tar_fail = progress_buf < -1
+
+    has_failed = torch.logical_or(has_fallen, tar_fail)
+
+    terminated = torch.where(has_failed, torch.ones_like(reset_buf), terminated)
+
+    reset = torch.where(
+        progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), terminated
+    )
+
+    return reset, terminated

@@ -57,6 +57,16 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self.use_current_pose_obs = config.steering_params.get("use_current_pose_obs", False)
         if "smpl" in self.config.robot.asset.asset_file_name:
             self.head_id = self.get_body_id("Head")
+
+        if self.use_current_pose_obs:
+            self.direction_obs = torch.zeros(
+                (
+                    config.num_envs,
+                    config.steering_params.obs_size + self.get_obs_size(),
+                ),
+                device=device,
+                dtype=torch.float,
+            )
         else:
             self.head_id = self.get_body_id("head")
 
@@ -195,10 +205,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         # print the target speed of the env and the speed actually achieved in that direction
 
-        if self.config.num_envs == 1 and self.config.steering_params.log_speed and self.progress_buf % 3 == 0:
-            print(f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}')
+        if (
+                self.config.num_envs == 1
+                and self.config.steering_params.log_speed
+                and self.progress_buf % 3 == 0
+        ):
             print(
-                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}')
+                f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}'
+            )
+            print(
+                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}'
+            )
 
         other_log_terms = {
             "total_rew": self.rew_buf,
@@ -288,5 +305,6 @@ def compute_heading_reward(
         "tangent_speed": tangent_speed,
         "tar_vel_err": tar_vel_err,
         "tangent_vel_err": tangent_vel_err,
+        "dir_reward": dir_reward,
     }
     return dir_reward, output_dict
