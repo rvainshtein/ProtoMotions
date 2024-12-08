@@ -26,14 +26,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import TYPE_CHECKING, Optional
-
 import numpy as np
-import torch
 from torch import Tensor
+from typing import TYPE_CHECKING, Optional, Tuple, Dict
 
 from isaac_utils import rotations, torch_utils
-from phys_anim.utils.motion_lib import MotionLib
+import torch
 
 if TYPE_CHECKING:
     from phys_anim.envs.masked_mimic_inversion.steering.isaacgym import (
@@ -57,19 +55,18 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._standard_speed_change = self.config.steering_params.standard_speed_change
         self._stop_probability = self.config.steering_params.stop_probability
         self.use_current_pose_obs = config.steering_params.get("use_current_pose_obs", False)
-
-        if self.use_current_pose_obs:
-            self.direction_obs = torch.zeros(
-                (config.num_envs, config.steering_params.obs_size + self.get_obs_size()),
-                device=device,
-                dtype=torch.float,
-            )
+        if "smpl" in self.config.robot.asset.asset_file_name:
+            self.head_id = self.get_body_id("Head")
         else:
-            self.direction_obs = torch.zeros(
-                (config.num_envs, config.steering_params.obs_size),
-                device=device,
-                dtype=torch.float,
-            )
+            self.head_id = self.get_body_id("head")
+
+        self.pose_obs_size = 6 if self.use_current_pose_obs else 0  # 2 for root and head height, 6 for root and head coords, self.get_obs_size() for full humanoid pose
+
+        self.direction_obs = torch.zeros(
+            (config.num_envs, config.steering_params.obs_size + self.pose_obs_size),  # 6 for root and head coords
+            device=device,
+            dtype=torch.float,
+        )
 
         self.inversion_obs = self.direction_obs
 
@@ -114,17 +111,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             ) + self._tar_speed_min
         else:
             dir_delta_theta = (
-                2 * self._standard_heading_change * torch.rand(n, device=self.device)
-                - self._standard_heading_change
+                    2 * self._standard_heading_change * torch.rand(n, device=self.device)
+                    - self._standard_heading_change
             )
             # map tar_dir_theta back to [0, 2pi], add delta, project back into [0, 2pi] and then shift.
             dir_theta = (dir_delta_theta + self._tar_dir_theta[env_ids] + np.pi) % (
-                2 * np.pi
+                    2 * np.pi
             ) - np.pi
 
             speed_delta = (
-                2 * self._standard_speed_change * torch.rand(n, device=self.device)
-                - self._standard_speed_change
+                    2 * self._standard_speed_change * torch.rand(n, device=self.device)
+                    - self._standard_speed_change
             )
             tar_speed = torch.clamp(
                 speed_delta + self._tar_speed[env_ids],
@@ -162,12 +159,26 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             root_states = self.get_humanoid_root_states()
             tar_dir = self._tar_dir
             tar_speed = self._tar_speed
-            humanoid_obs = self.obs_buf
+            # humanoid_obs = self.obs_buf
+            global_translations = self.get_body_positions()
+            # root_height = global_translations[:, 0, 2]
+            # head_height = global_translations[:, self.head_id, 2]
+            # humanoid_obs = torch.cat([root_height.unsqueeze(-1), head_height.unsqueeze(-1)], dim=-1)
+            root_coords = global_translations[:, 0, :]
+            head_coords = global_translations[:, self.head_id, :]
+            humanoid_obs = torch.cat([root_coords, head_coords], dim=-1)
         else:
             root_states = self.get_humanoid_root_states()[env_ids]
             tar_dir = self._tar_dir[env_ids]
             tar_speed = self._tar_speed[env_ids]
-            humanoid_obs = self.obs_buf[env_ids]
+            # humanoid_obs = self.obs_buf[env_ids]
+            global_translations = self.get_body_positions()[env_ids]
+            # root_height = global_translations[env_ids, 0, 2]
+            # head_height = global_translations[env_ids, self.head_id, 2]
+            # humanoid_obs = torch.cat([root_height.unsqueeze(-1), head_height.unsqueeze(-1)], dim=-1)
+            root_coords = global_translations[env_ids, 0, :]
+            head_coords = global_translations[env_ids, self.head_id, :]
+            humanoid_obs = torch.cat([root_coords, head_coords], dim=-1)
 
         obs = compute_heading_observations(root_states, tar_dir, tar_speed, self.w_last)
         if self.use_current_pose_obs:
@@ -182,16 +193,6 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         )
         self._prev_root_pos[:] = root_pos
 
-        # other_log_terms = {
-        #     "total_rew": self.rew_buf,
-        # }
-        #
-        # for rew_name, rew in other_log_terms.items():
-        #     self.log_dict[f"{rew_name}_mean"] = rew.mean()
-        #     self.log_dict[f"{rew_name}_std"] = rew.std()
-        #
-        # self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
-        # self.last_other_rewards = other_log_terms
         # print the target speed of the env and the speed actually achieved in that direction
 
         if self.config.num_envs == 1 and self.config.steering_params.log_speed and self.progress_buf % 3 == 0:
@@ -218,7 +219,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
 @torch.jit.script
 def compute_heading_observations(
-    root_states: Tensor, tar_dir: Tensor, tar_speed: Tensor, w_last: bool
+        root_states: Tensor, tar_dir: Tensor, tar_speed: Tensor, w_last: bool
 ) -> Tensor:
     root_rot = root_states[:, 3:7]
 
@@ -275,8 +276,8 @@ def compute_heading_reward(
     dir_reward = torch.exp(
         -vel_err_scale
         * (
-            tar_vel_err * tar_vel_err
-            + tangent_err_w * tangent_vel_err * tangent_vel_err
+                tar_vel_err * tar_vel_err
+                + tangent_err_w * tangent_vel_err * tangent_vel_err
         )
     )
 
