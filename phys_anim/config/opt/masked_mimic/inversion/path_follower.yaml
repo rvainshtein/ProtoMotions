@@ -7,3 +7,7 @@ algo:
   config:
     models:
       extra_input_obs_size: ${env.config.path_follower_params.path_obs_size}
+
+wandb:
+  wandb_tags: [ inversion, path_follower ]
+  wandb_group: inversion_path_follower

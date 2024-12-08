@@ -57,3 +57,6 @@ algo:
            retrieve_from_env: True
            dtype: float
            size: ${algo.config.models.extra_input_model.num_in}
+
+wandb:
+  wandb_tags: [inversion]
