@@ -48,18 +48,27 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         self.inversion_obs = torch.cat([self.direction_obs, facing_obs], dim=-1)
 
     def compute_reward(self, actions):
-        root_pos = self.get_humanoid_root_states()[..., :3]
+        root_states = self.get_humanoid_root_states()
+        root_pos = root_states[..., :3]
+        root_rot = root_states[:, 3:7]
         self.rew_buf[:], output_dict = compute_facing_reward(
-            root_pos, self._prev_root_pos, self._tar_dir, self._tar_speed, self.dt
+            root_pos,
+            self._prev_root_pos,
+            root_rot,
+            self._tar_dir,
+            self._tar_speed,
+            self._tar_facing_dir,
+            self.dt,
+            self.w_last
         )
         self._prev_root_pos[:] = root_pos
 
         # print the target speed of the env and the speed actually achieved in that direction
 
         if (
-            self.config.num_envs == 1
-            and self.config.steering_params.log_speed
-            and self.progress_buf % 3 == 0
+                self.config.num_envs == 1
+                and self.config.steering_params.log_speed
+                and self.progress_buf % 3 == 0
         ):
             print(
                 f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}'
@@ -71,7 +80,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         other_log_terms = {
             "total_rew": self.rew_buf,
         }
-        other_log_terms = other_log_terms | output_dict
+        other_log_terms = {**other_log_terms, **output_dict}
 
         for rew_name, rew in other_log_terms.items():
             self.log_dict[f"{rew_name}_mean"] = rew.mean()
@@ -87,13 +96,13 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             face_dir_theta = 2 * torch.pi * torch.rand(n, device=self.device) - torch.pi
         else:
             dir_delta_theta = (
-                2 * self._standard_heading_change * torch.rand(n, device=self.device)
-                - self._standard_heading_change
+                    2 * self._standard_heading_change * torch.rand(n, device=self.device)
+                    - self._standard_heading_change
             )
             # map tar_dir_theta back to [0, 2pi], add delta, project back into [0, 2pi] and then shift.
             face_dir_theta = (
-                dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
-            ) % (2 * np.pi) - np.pi
+                                     dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
+                             ) % (2 * np.pi) - np.pi
 
         face_tar_dir = torch.stack(
             [torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1
@@ -117,13 +126,14 @@ def compute_facing_observations(root_states, tar_face_dir, w_last: bool):
 
 @torch.jit.script
 def compute_facing_reward(
-    root_pos: Tensor,
-    prev_root_pos: Tensor,
-    root_rot: Tensor,
-    tar_dir: Tensor,
-    tar_speed: Tensor,
-    tar_face_dir: Tensor,
-    dt: float,
+        root_pos: Tensor,
+        prev_root_pos: Tensor,
+        root_rot: Tensor,
+        tar_dir: Tensor,
+        tar_speed: Tensor,
+        tar_face_dir: Tensor,
+        dt: float,
+        w_last: bool
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     dir_reward, output_dict = compute_heading_reward(
         root_pos, prev_root_pos, tar_dir, tar_speed, dt
@@ -131,10 +141,10 @@ def compute_facing_reward(
 
     dir_reward_w = 0.7
     facing_reward_w = 0.3
-    heading_rot = calc_heading_quat(root_rot)
+    heading_rot = calc_heading_quat(root_rot, w_last)
     facing_dir = torch.zeros_like(root_pos)
     facing_dir[..., 0] = 1.0
-    facing_dir = quat_rotate(heading_rot, facing_dir)
+    facing_dir = quat_rotate(heading_rot, facing_dir, w_last)
     facing_err = torch.sum(tar_face_dir * facing_dir[..., 0:2], dim=-1)
     facing_reward = torch.clamp_min(facing_err, 0.0)
 

@@ -9,7 +9,6 @@ env:
       random_heading_probability: 0.2
       standard_heading_change: 1.57
       tar_speed_min: 1.2
-#      tar_speed_min: 4
       tar_speed_max: 6
       change_steps_min: 199
       change_steps_max: 200
