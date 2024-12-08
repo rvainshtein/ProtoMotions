@@ -3,3 +3,7 @@
 defaults:
   - /exp/inversion/base
   - /opt/masked_mimic/inversion/steering
+
+wandb:
+  wandb_group: inversion_steering
+  wandb_tags: [ inversion, steering ]
