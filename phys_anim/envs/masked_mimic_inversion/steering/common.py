@@ -26,7 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Dict, Tuple
 
 import numpy as np
 import torch
@@ -52,15 +52,24 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         self._heading_change_steps_min = self.config.steering_params.change_steps_min
         self._heading_change_steps_max = self.config.steering_params.change_steps_max
-        self._random_heading_probability = self.config.steering_params.random_heading_probability
-        self._standard_heading_change = self.config.steering_params.standard_heading_change
+        self._random_heading_probability = (
+            self.config.steering_params.random_heading_probability
+        )
+        self._standard_heading_change = (
+            self.config.steering_params.standard_heading_change
+        )
         self._standard_speed_change = self.config.steering_params.standard_speed_change
         self._stop_probability = self.config.steering_params.stop_probability
-        self.use_current_pose_obs = config.steering_params.get("use_current_pose_obs", False)
+        self.use_current_pose_obs = config.steering_params.get(
+            "use_current_pose_obs", False
+        )
 
         if self.use_current_pose_obs:
             self.direction_obs = torch.zeros(
-                (config.num_envs, config.steering_params.obs_size + self.get_obs_size()),
+                (
+                    config.num_envs,
+                    config.steering_params.obs_size + self.get_obs_size(),
+                ),
                 device=device,
                 dtype=torch.float,
             )
@@ -194,10 +203,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         # self.last_other_rewards = other_log_terms
         # print the target speed of the env and the speed actually achieved in that direction
 
-        if self.config.num_envs == 1 and self.config.steering_params.log_speed and self.progress_buf % 3 == 0:
-            print(f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}')
+        if (
+            self.config.num_envs == 1
+            and self.config.steering_params.log_speed
+            and self.progress_buf % 3 == 0
+        ):
             print(
-                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}')
+                f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}'
+            )
+            print(
+                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}'
+            )
 
         other_log_terms = {
             "total_rew": self.rew_buf,
@@ -236,11 +252,11 @@ def compute_heading_observations(
 
 @torch.jit.script
 def compute_heading_reward(
-        root_pos: Tensor,
-        prev_root_pos: Tensor,
-        tar_dir: Tensor,
-        tar_speed: Tensor,
-        dt: float,
+    root_pos: Tensor,
+    prev_root_pos: Tensor,
+    tar_dir: Tensor,
+    tar_speed: Tensor,
+    dt: float,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """
     Compute the reward for the steering task.
@@ -287,5 +303,6 @@ def compute_heading_reward(
         "tangent_speed": tangent_speed,
         "tar_vel_err": tar_vel_err,
         "tangent_vel_err": tangent_vel_err,
+        "dir_reward": dir_reward,
     }
     return dir_reward, output_dict
