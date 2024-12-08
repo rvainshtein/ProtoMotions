@@ -177,7 +177,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
     def compute_reward(self, actions):
         root_pos = self.get_humanoid_root_states()[..., :3]
-        self.rew_buf[:] = compute_heading_reward(
+        self.rew_buf[:], output_dict = compute_heading_reward(
             root_pos, self._prev_root_pos, self._tar_dir, self._tar_speed, self.dt
         )
         self._prev_root_pos[:] = root_pos
@@ -192,6 +192,23 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         #
         # self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
         # self.last_other_rewards = other_log_terms
+        # print the target speed of the env and the speed actually achieved in that direction
+
+        if self.config.num_envs == 1 and self.config.steering_params.log_speed and self.progress_buf % 3 == 0:
+            print(f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}')
+            print(
+                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}')
+
+        other_log_terms = {
+            "total_rew": self.rew_buf,
+        }
+
+        for rew_name, rew in other_log_terms.items():
+            self.log_dict[f"{rew_name}_mean"] = rew.mean()
+            # self.log_dict[f"{rew_name}_std"] = rew.std()
+
+        self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
+        self.last_other_rewards = other_log_terms
 
 
 #####################################################################
@@ -219,12 +236,28 @@ def compute_heading_observations(
 
 @torch.jit.script
 def compute_heading_reward(
-    root_pos: Tensor,
-    prev_root_pos: Tensor,
-    tar_dir: Tensor,
-    tar_speed: Tensor,
-    dt: float,
-) -> Tensor:
+        root_pos: Tensor,
+        prev_root_pos: Tensor,
+        tar_dir: Tensor,
+        tar_speed: Tensor,
+        dt: float,
+) -> Tuple[Tensor, Dict[str, Tensor]]:
+    """
+    Compute the reward for the steering task.
+    The reward is based on the error in the target direction and speed.
+    The reward is given by:
+    reward = exp(-vel_err_scale * (tar_vel_err^2 + tangent_err_w * tangent_vel_err^2))
+    where:
+    tar_vel_err = target speed - current speed in the target direction
+    tangent_vel_err = current speed in the tangent direction
+
+    Args:
+    root_pos: The root position of the humanoid
+    prev_root_pos: The previous root position of the humanoid
+    tar_dir: The target direction
+    tar_speed: The target speed
+    dt: The time step
+    """
     vel_err_scale = 0.25
     tangent_err_w = 0.1
 
@@ -249,5 +282,10 @@ def compute_heading_reward(
 
     speed_mask = tar_dir_speed < -0.5
     dir_reward[speed_mask] = 0
-
-    return dir_reward
+    output_dict = {
+        "tar_dir_speed": tar_dir_speed,
+        "tangent_speed": tangent_speed,
+        "tar_vel_err": tar_vel_err,
+        "tangent_vel_err": tangent_vel_err,
+    }
+    return dir_reward, output_dict
