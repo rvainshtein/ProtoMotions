@@ -81,15 +81,10 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
             self._marker_handles[env_id].append(marker_handle)
 
     def _build_marker_state_tensors(self):
-        num_actors = self.get_num_actors_per_env()
-        if self.total_num_objects > 0:
-            self._marker_states = self.root_states[: -self.total_num_objects].view(
-                self.num_envs, num_actors, self.root_states.shape[-1]
-            )[..., 1 : (1 + self._num_traj_samples), :]
-        else:
-            self._marker_states = self.root_states.view(
-                self.num_envs, num_actors, self.root_states.shape[-1]
-            )[..., 1 : (1 + self._num_traj_samples), :]
+        num_actors = self.root_states.shape[0] // self.num_envs
+        self._marker_states = self.root_states.view(
+            self.num_envs, num_actors, self.root_states.shape[-1]
+        )[..., 1 : (1 + self.config.path_follower_params.num_traj_samples), :]
         self._marker_pos = self._marker_states[..., :3]
 
         self._marker_actor_ids = self.humanoid_actor_ids.unsqueeze(
@@ -109,18 +104,14 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
     # Helpers
     ###############################################################
     def _update_marker(self):
-        traj_samples = self.fetch_path_samples(time_offset=0)[0].clone()
+        traj_samples = self.fetch_path_samples().clone()
         self._marker_pos[:] = traj_samples
-        if not self.config.path_generator.height_conditioned:
-            self._marker_pos[..., 2] = 0.92  # CT hack
+        if not self.config.path_follower_params.path_generator.height_conditioned:
+            self._marker_pos[..., 2] = 0.8  # CT hack
 
-        markers_global_positions = self.convert_to_global_coords(
-            traj_samples[..., :2].view(self.num_envs, -1, 2),
-            self.env_offsets[..., :2].view(self.num_envs, 1, 2),
-        ).view(-1, 2)
-        ground_below_marker = self.get_ground_heights(markers_global_positions).view(
-            traj_samples.shape[:-1]
-        )
+        ground_below_marker = self.get_ground_heights(
+            traj_samples[..., :2].view(-1, 2)
+        ).view(traj_samples.shape[:-1])
 
         self._marker_pos[..., 2] += ground_below_marker
 
@@ -134,19 +125,16 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
     def draw_task(self):
         cols = np.array([[1.0, 0.0, 0.0]], dtype=np.float32)
 
-        bodies_positions = self.get_body_positions()
-        env_global_positions = self.convert_to_global_coords(
-            bodies_positions[:, 0, :2], self.env_offsets[..., :2]
-        )
+        # bodies_positions = self.get_body_positions()
 
         self._update_marker()
 
         for i, env_ptr in enumerate(self.envs):
             verts = self.path_generator.get_traj_verts(i).clone()
-            if not self.config.path_generator.height_conditioned:
+            if not self.config.path_follower_params.path_generator.height_conditioned:
                 verts[..., 2] = self.humanoid_root_states[i, 2]  # ZL Hack
             else:
-                verts[..., 2] += self.get_ground_heights(env_global_positions)[i]
+                verts[..., 2] += self.get_ground_heights(self.humanoid_root_states[i, :2].view(1, 2)).view(-1)
             lines = torch.cat([verts[:-1], verts[1:]], dim=-1).cpu().numpy()
             curr_cols = np.broadcast_to(cols, [lines.shape[0], cols.shape[-1]])
             self.gym.add_lines(self.viewer, env_ptr, lines.shape[0], lines, curr_cols)
