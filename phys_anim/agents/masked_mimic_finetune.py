@@ -5,8 +5,9 @@ from phys_anim.agents.models.actor import ActorFixedSigmaVAE
 import torch
 from torch import Tensor
 from lightning.fabric import Fabric
+from lightning.fabric.wrappers import _FabricModule
 
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Optional, Union
 
 
 class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
@@ -39,3 +40,37 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
                 fixed_name = name.replace("_forward_module.", "")
                 if fixed_name in pre_trained_actor_state_dict:
                     param.requires_grad = False
+
+        print_param_summary(self.actor)
+
+    @torch.no_grad()
+    def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
+        # self.eval()
+        # log_dict, success_rate = self.env.calc_eval_metrics()  # TODO: Implement this in the env
+        # return log_dict, success_rate
+        return {}, None
+
+
+def print_param_summary(model: Union[torch.nn.Module, _FabricModule]) -> None:
+    # print the number of trainable parameters, and the number of total parameters
+    # format them in a human-readable way
+    if isinstance(model, _FabricModule):
+        model = model.module
+
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_percentage = (trainable_params / total_params) * 100
+    print(f"Total parameters: {human_readable_count(total_params)}")
+    print(f"Trainable parameters: {human_readable_count(trainable_params)} ({trainable_percentage:.2f}%)")
+
+
+# Helper function to format large numbers with K, M, G
+def human_readable_count(num):
+    if num >= 1e9:
+        return f"{num / 1e9:.2f}G"
+    elif num >= 1e6:
+        return f"{num / 1e6:.2f}M"
+    elif num >= 1e3:
+        return f"{num / 1e3:.2f}K"
+    else:
+        return str(num)
