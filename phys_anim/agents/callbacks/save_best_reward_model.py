@@ -10,7 +10,7 @@ class SaveBestModelCallback:
     training_loop: PPO
     env: BaseHumanoid
 
-    def __init__(self, warmup: int = 20):
+    def __init__(self, warmup: int = 100):
         """
         Callback to save the model when rewards exceed the previous best.
         """
@@ -36,4 +36,5 @@ class SaveBestModelCallback:
             # Save the model to the specified directory
             ckpt_name = "best_model.ckpt"
             training_loop.save(name=ckpt_name)  # the path is None, so it will save to the default directory
-            print(f"Model saved with reward: {self.best_reward}")
+            # print the version of the run (model path save folder)
+            print(f"Model saved to: {Path(training_loop.fabric.loggers[0].log_dir) / ckpt_name}")
