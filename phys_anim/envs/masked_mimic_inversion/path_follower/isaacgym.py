@@ -1,11 +1,9 @@
-from isaacgym import gymapi, gymtorch  # type: ignore[misc]
-from isaac_utils import torch_utils
-
-import torch
-from torch import Tensor
+from typing import Optional
 
 import numpy as np
-from typing import Optional
+import torch
+from isaac_utils import torch_utils
+from isaacgym import gymapi, gymtorch  # type: ignore[misc]
 
 from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
     MaskedMimicTaskHumanoid,
@@ -17,10 +15,13 @@ from phys_anim.utils.motion_lib import MotionLib
 
 
 class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimicTaskHumanoid):  # type: ignore[misc]
-    def __init__(
-        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
-    ):
+    def __init__(self, config, device: torch.device, motion_lib: Optional[MotionLib] = None):
         super().__init__(config=config, device=device, motion_lib=motion_lib)
+
+        if "smpl" in self.config.robot.asset.asset_file_name:
+            self.head_body_id = self.build_body_ids_tensor(["Head"]).item()
+        else:
+            self.head_body_id = self.build_body_ids_tensor(["head"]).item()
 
         if not self.headless:
             self._build_marker_state_tensors()
@@ -60,8 +61,7 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
     def _build_marker(self, env_id, env_ptr):
         default_pose = gymapi.Transform()
 
-        for i in range(self._num_traj_samples):
-
+        for i in range(self.config.path_follower_params.num_traj_samples):
             marker_handle = self.gym.create_actor(
                 env_ptr,
                 self._marker_asset,
@@ -84,7 +84,7 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
         num_actors = self.root_states.shape[0] // self.num_envs
         self._marker_states = self.root_states.view(
             self.num_envs, num_actors, self.root_states.shape[-1]
-        )[..., 1 : (1 + self.config.path_follower_params.num_traj_samples), :]
+        )[..., 1: (1 + self.config.path_follower_params.num_traj_samples), :]
         self._marker_pos = self._marker_states[..., :3]
 
         self._marker_actor_ids = self.humanoid_actor_ids.unsqueeze(
