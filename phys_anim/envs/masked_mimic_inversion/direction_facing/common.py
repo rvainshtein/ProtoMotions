@@ -41,7 +41,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         )
 
         self._text_embedding = None
-        if self.config.use_text:
+        if self.config.get("use_text", False):
             from transformers import AutoTokenizer, XCLIPTextModel
 
             model = XCLIPTextModel.from_pretrained("microsoft/xclip-base-patch32")
@@ -139,7 +139,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         super().compute_observations(env_ids)
         self.mask_everything()
 
-        if self.config.use_chens_prior:
+        if self.config.get("use_chens_prior", False):
             turning_envs = self.progress_buf < 0
             turned_envs = ~turning_envs
 
@@ -195,7 +195,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             self.masked_mimic_target_poses_masks[:] = False
             self.masked_mimic_target_poses_masks[turned_envs, 4:] = True
 
-            if self.config.use_text:
+            if self.config.get("use_text", False):
                 self.motion_text_embeddings_mask[:] = True
                 self.motion_text_embeddings[:] = self._text_embedding
 
