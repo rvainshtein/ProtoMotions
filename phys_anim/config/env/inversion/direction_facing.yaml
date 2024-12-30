@@ -4,3 +4,6 @@ defaults:
 
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.direction_facing.${backbone}.MaskedMimicDirectionFacingHumanoid
+  config:
+    use_text: False
+    use_chens_prior: False
