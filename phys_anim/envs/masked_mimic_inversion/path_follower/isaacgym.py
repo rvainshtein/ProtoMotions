@@ -15,7 +15,9 @@ from phys_anim.utils.motion_lib import MotionLib
 
 
 class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimicTaskHumanoid):  # type: ignore[misc]
-    def __init__(self, config, device: torch.device, motion_lib: Optional[MotionLib] = None):
+    def __init__(
+        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
+    ):
         super().__init__(config=config, device=device, motion_lib=motion_lib)
 
         if "smpl" in self.config.robot.asset.asset_file_name:
@@ -84,7 +86,7 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
         num_actors = self.root_states.shape[0] // self.num_envs
         self._marker_states = self.root_states.view(
             self.num_envs, num_actors, self.root_states.shape[-1]
-        )[..., 1: (1 + self.config.path_follower_params.num_traj_samples), :]
+        )[..., 1 : (1 + self.config.path_follower_params.num_traj_samples), :]
         self._marker_pos = self._marker_states[..., :3]
 
         self._marker_actor_ids = self.humanoid_actor_ids.unsqueeze(
@@ -93,12 +95,6 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
             self._marker_handles, dtype=torch.int32, device=self.device
         )
         self._marker_actor_ids = self._marker_actor_ids.flatten()
-
-    ###############################################################
-    # Environment step logic
-    ###############################################################
-    def compute_observations(self, env_ids=None):
-        super().compute_observations(env_ids)
 
     ###############################################################
     # Helpers
@@ -134,7 +130,9 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
             if not self.config.path_follower_params.path_generator.height_conditioned:
                 verts[..., 2] = self.humanoid_root_states[i, 2]  # ZL Hack
             else:
-                verts[..., 2] += self.get_ground_heights(self.humanoid_root_states[i, :2].view(1, 2)).view(-1)
+                verts[..., 2] += self.get_ground_heights(
+                    self.humanoid_root_states[i, :2].view(1, 2)
+                ).view(-1)
             lines = torch.cat([verts[:-1], verts[1:]], dim=-1).cpu().numpy()
             curr_cols = np.broadcast_to(cols, [lines.shape[0], cols.shape[-1]])
             self.gym.add_lines(self.viewer, env_ptr, lines.shape[0], lines, curr_cols)
