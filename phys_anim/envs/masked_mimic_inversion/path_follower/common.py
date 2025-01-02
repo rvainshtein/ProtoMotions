@@ -19,7 +19,7 @@ else:
 
 class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: ignore[misc]
     def __init__(
-            self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
+        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
     ):
         super().__init__(config=config, device=device, motion_lib=motion_lib)
         self.path_obs = torch.zeros(
@@ -64,6 +64,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.rew_buf[:] = compute_path_reward(
             head_position, tar_pos, self.config.path_follower_params.height_conditioned
         )
+
+    def compute_observations(self, env_ids=None):
+        self.mask_everything()
+        super().compute_observations(env_ids)
+        self.mask_everything()
 
     def compute_reset(self):
         time = self.progress_buf * self.dt
@@ -113,8 +118,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
             reset_head_position = bodies_positions[
-                                  self.reset_path_ids, self.head_body_id, :
-                                  ]
+                self.reset_path_ids, self.head_body_id, :
+            ]
             flat_reset_head_position = reset_head_position.view(-1, 3)
             ground_below_reset_head = self.get_ground_heights(
                 bodies_positions[:, self.head_body_id, :2]
@@ -160,7 +165,9 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         timestep_beg = self.progress_buf[env_ids] * self.dt
         timesteps = torch.arange(
-            self.config.path_follower_params.num_traj_samples, device=self.device, dtype=torch.float
+            self.config.path_follower_params.num_traj_samples,
+            device=self.device,
+            dtype=torch.float,
         )
         timesteps = timesteps * self.config.path_follower_params.traj_sample_timestep
         traj_timesteps = timestep_beg.unsqueeze(-1) + timesteps
@@ -184,11 +191,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
 @torch.jit.script
 def compute_path_observations(
-        root_states: Tensor,
-        head_states: Tensor,
-        traj_samples: Tensor,
-        w_last: bool,
-        height_conditioned: bool,
+    root_states: Tensor,
+    head_states: Tensor,
+    traj_samples: Tensor,
+    w_last: bool,
+    height_conditioned: bool,
 ) -> Tensor:
     root_rot = root_states[:, 3:7]
     heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
@@ -249,20 +256,20 @@ def compute_path_reward(head_pos, tar_pos, height_conditioned):
 
 @torch.jit.script
 def compute_humanoid_reset(
-        reset_buf,
-        progress_buf,
-        contact_buf,
-        non_termination_contact_body_ids,
-        rigid_body_pos,
-        tar_pos,
-        max_episode_length,
-        fail_dist,
-        fail_height_dist,
-        enable_early_termination,
-        enable_path_termination,
-        enable_height_termination,
-        termination_heights,
-        head_body_id,
+    reset_buf,
+    progress_buf,
+    contact_buf,
+    non_termination_contact_body_ids,
+    rigid_body_pos,
+    tar_pos,
+    max_episode_length,
+    fail_dist,
+    fail_height_dist,
+    enable_early_termination,
+    enable_path_termination,
+    enable_height_termination,
+    termination_heights,
+    head_body_id,
 ):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, bool, bool, bool, Tensor, int) -> Tuple[Tensor, Tensor]
     terminated = torch.zeros_like(reset_buf)

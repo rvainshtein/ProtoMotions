@@ -3,8 +3,12 @@ from typing import Optional
 import torch
 
 # from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import MaskedMimicTaskHumanoid
-from phys_anim.envs.masked_mimic_inversion.direction_facing.common import MaskedMimicBaseDirectionFacing
-from phys_anim.envs.masked_mimic_inversion.steering.isaacgym import MaskedMimicDirectionHumanoid
+from phys_anim.envs.masked_mimic_inversion.direction_facing.common import (
+    MaskedMimicBaseDirectionFacing,
+)
+from phys_anim.envs.masked_mimic_inversion.steering.isaacgym import (
+    MaskedMimicDirectionHumanoid,
+)
 from isaacgym import gymapi, gymtorch  # type: ignore[misc]
 from isaac_utils import rotations
 
@@ -12,8 +16,12 @@ TAR_ACTOR_ID = 1
 TAR_FACING_ACTOR_ID = 2
 
 
-class MaskedMimicDirectionFacingHumanoid(MaskedMimicBaseDirectionFacing, MaskedMimicDirectionHumanoid):
-    def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
+class MaskedMimicDirectionFacingHumanoid(
+    MaskedMimicBaseDirectionFacing, MaskedMimicDirectionHumanoid
+):
+    def __init__(
+        self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None
+    ):
         super().__init__(config=config, device=device)
 
         if not self.headless:
@@ -75,9 +83,22 @@ class MaskedMimicDirectionFacingHumanoid(MaskedMimicBaseDirectionFacing, MaskedM
         )
         self._marker_handles.append(marker_handle)
 
-        face_marker_handle = self.gym.create_actor(env_ptr, self._marker_asset, default_pose, "face_marker", col_group,
-                                                   col_filter, segmentation_id)
-        self.gym.set_rigid_body_color(env_ptr, face_marker_handle, 0, gymapi.MESH_VISUAL, gymapi.Vec3(0.0, 0.0, 0.8))
+        face_marker_handle = self.gym.create_actor(
+            env_ptr,
+            self._marker_asset,
+            default_pose,
+            "face_marker",
+            col_group,
+            col_filter,
+            segmentation_id,
+        )
+        self.gym.set_rigid_body_color(
+            env_ptr,
+            face_marker_handle,
+            0,
+            gymapi.MESH_VISUAL,
+            gymapi.Vec3(0.0, 0.0, 0.8),
+        )
         self._face_marker_handles.append(face_marker_handle)
 
         return
@@ -92,8 +113,9 @@ class MaskedMimicDirectionFacingHumanoid(MaskedMimicBaseDirectionFacing, MaskedM
         self._marker_rot = self._marker_states[..., 3:7]
         self._marker_actor_ids = self.humanoid_actor_ids + TAR_ACTOR_ID
 
-        self._face_marker_states = self.root_states.view(self.num_envs, num_actors, self.root_states.shape[-1])[...,
-                                   TAR_FACING_ACTOR_ID, :]
+        self._face_marker_states = self.root_states.view(
+            self.num_envs, num_actors, self.root_states.shape[-1]
+        )[..., TAR_FACING_ACTOR_ID, :]
         self._face_marker_pos = self._face_marker_states[..., :3]
         self._face_marker_rot = self._face_marker_states[..., 3:7]
         self._face_marker_actor_ids = self.humanoid_actor_ids + TAR_FACING_ACTOR_ID
@@ -118,16 +140,22 @@ class MaskedMimicDirectionFacingHumanoid(MaskedMimicBaseDirectionFacing, MaskedM
         )
         self._marker_rot[:] = heading_q
 
-        self._face_marker_pos[..., 0:2] = humanoid_root_pos[..., 0:2] + self._tar_facing_dir
+        self._face_marker_pos[..., 0:2] = (
+            humanoid_root_pos[..., 0:2] + self._tar_facing_dir
+        )
         self._face_marker_pos[..., 2] = 0.0
 
-        face_theta = torch.atan2(self._tar_facing_dir[..., 1], self._tar_facing_dir[..., 0])
+        face_theta = torch.atan2(
+            self._tar_facing_dir[..., 1], self._tar_facing_dir[..., 0]
+        )
         face_axis = torch.zeros_like(self._marker_pos)
         face_axis[..., -1] = 1.0
         face_q = rotations.quat_from_angle_axis(face_theta, heading_axis, w_last=True)
         self._face_marker_rot[:] = face_q
 
-        marker_ids = torch.cat([self._marker_actor_ids, self._face_marker_actor_ids], dim=0)
+        marker_ids = torch.cat(
+            [self._marker_actor_ids, self._face_marker_actor_ids], dim=0
+        )
 
         self.gym.set_actor_root_state_tensor_indexed(
             self.sim,
@@ -151,6 +179,7 @@ class MaskedMimicDirectionFacingHumanoid(MaskedMimicBaseDirectionFacing, MaskedM
         # moving_dir /= torch.norm(moving_dir, dim=-1, keepdim=True)  # Normalize to get unit vector
         #
         # # Get speed (magnitude of the velocity vector)
+
     #     speed = torch.norm(velocity, dim=-1).cpu().numpy()
     #
     #     # for i in range(self.num_envs):
