@@ -1,9 +1,0 @@
-# @package _global_
-
-defaults:
-  - masked_mimic
-  - /opt/clear_critic
-  - /opt/masked_mimic/inversion/steering
-  - /algo/masked_mimic_finetune
-
-experiment_name: masked_mimic_inversion_steering
