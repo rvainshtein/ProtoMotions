@@ -64,13 +64,15 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
     def compute_observations(self, env_ids=None):
         obs = super().compute_observations(env_ids)
+        self.compute_priors(env_ids)
+        return obs
+
+    def compute_priors(self, env_ids):
         if self.config.get("use_chens_prior", False):
             self.create_chens_prior(env_ids)
-
         if self.config.get("use_text", False):
             self.motion_text_embeddings_mask[:] = True
             self.motion_text_embeddings[:] = self._text_embedding
-        return obs
 
     def compute_humanoid_obs(self, env_ids=None):
         humanoid_obs = super().compute_humanoid_obs(env_ids)

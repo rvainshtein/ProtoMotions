@@ -69,6 +69,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.mask_everything()
         super().compute_observations(env_ids)
         self.mask_everything()
+        self.compute_priors(env_ids)
 
     def create_chens_prior(self, env_ids):
         if env_ids is None:

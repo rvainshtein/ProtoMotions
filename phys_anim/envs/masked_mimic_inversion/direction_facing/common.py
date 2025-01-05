@@ -122,6 +122,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         self.mask_everything()
         super().compute_observations(env_ids)
         self.mask_everything()
+        self.compute_priors(env_ids)
 
     def create_chens_prior(self):
         turning_envs = self.progress_buf < 0
