@@ -1,6 +1,6 @@
 def main():
     output_file_path = "runs.txt"
-    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +opt=[full_run,wdb]"
+    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +opt=[full_run,wdb,slurm_autoresume]"
     base_run_command += " algo.config.max_epochs=4000 seed=${seed} wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
     experiment_arg = "+exp=inversion/{}"
     extra_args = "{}"
