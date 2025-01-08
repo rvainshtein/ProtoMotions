@@ -344,12 +344,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             self.humanoid_asset, self.condition_body_part
         )
 
-        if env_ids is None:
-            reshaped_target_pos[:, :, body_part, :3] = target_root_pos[..., :3]
-            reshaped_target_rot[:, :, body_part] = target_root_rot[:]
-        else:
-            reshaped_target_pos[env_ids, :, body_part, :3] = target_root_pos[env_ids, ..., :3]
-            reshaped_target_rot[env_ids, :, body_part] = target_root_rot[env_ids]
+        reshaped_target_pos[:, :, body_part, :3] = target_root_pos[..., :3]
+        reshaped_target_rot[:, :, body_part] = target_root_rot[:]
 
         # reshaped_target_pos[:, :, body_part, -1] = 0.92  # standing up
 
@@ -364,21 +360,12 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             self.num_envs, num_future_steps, *cur_gr.shape[1:]
         )
 
-        if env_ids is None:
-            flat_cur_pos = expanded_body_pos.reshape(flat_target_pos.shape)
-            flat_cur_rot = expanded_body_rot.reshape(flat_target_rot.shape)
-        else:
-            flat_cur_pos = expanded_body_pos[env_ids].reshape((-1, *flat_target_pos.shape[1:]))
-            flat_cur_rot = expanded_body_rot[env_ids].reshape((-1, *flat_target_rot.shape[1:]))
-            
-        # if env_ids is None:
-        #     root_pos = flat_cur_pos[:, 0, :]
-        #     root_rot = flat_cur_rot[:, 0, :]
-        # else:
-        #     root_pos = flat_cur_pos[env_ids, 0, :]
-        #     root_rot = flat_cur_rot[env_ids, 0, :]
+        flat_cur_pos = expanded_body_pos.reshape(flat_target_pos.shape)
+        flat_cur_rot = expanded_body_rot.reshape(flat_target_rot.shape)
+
         root_pos = flat_cur_pos[:, 0, :]
         root_rot = flat_cur_rot[:, 0, :]
+
         heading_rot = torch_utils.calc_heading_quat_inv(root_rot, self.w_last)
 
         heading_rot_expand = heading_rot.unsqueeze(-2)
