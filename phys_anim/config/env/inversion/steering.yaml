@@ -1,4 +1,6 @@
 # @package _global_
+defaults:
+  - /env/inversion/base
 
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.steering.${backbone}.MaskedMimicDirectionHumanoid

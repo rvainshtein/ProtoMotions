@@ -4,6 +4,7 @@
 # and any modifications thereto.  Any use, reproduction, disclosure or
 # distribution of this software and related documentation without an express
 # license agreement from NVIDIA CORPORATION is strictly prohibited.
+import torch
 
 from phys_anim.utils.motion_lib import MotionLib
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     )
 else:
     MaskedMimicTaskHumanoid = object
+
 
 # TODO: heading, pacer path follower, location, reach
 #  task defines all parameters, by default they should be fully masked out.
@@ -29,6 +31,12 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def __init__(self, config, device, motion_lib: Optional[MotionLib] = None):
         super().__init__(config, device, motion_lib=motion_lib)
         self.setup_task()
+
+        self._text_embedding = None
+        if self.config.get("use_text", False):
+            self.text_command = self.config.get("text_command", "a person is walking upright")
+            text_embedding = get_text_embedding(text_command=self.text_command, device=self.device)
+            self._text_embedding = text_embedding
 
     ###############################################################
     # Set up environment
@@ -51,6 +59,21 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     ###############################################################
     # Environment step logic
     ###############################################################
+    def create_chens_prior(self):
+        raise NotImplementedError
+
+    def compute_observations(self, env_ids=None):
+        obs = super().compute_observations(env_ids)
+        self.compute_priors(env_ids)
+        return obs
+
+    def compute_priors(self, env_ids):
+        if self.config.get("use_chens_prior", False):
+            self.create_chens_prior(env_ids)
+        if self.config.get("use_text", False):
+            self.motion_text_embeddings_mask[:] = True
+            self.motion_text_embeddings[:] = self._text_embedding
+
     def compute_humanoid_obs(self, env_ids=None):
         humanoid_obs = super().compute_humanoid_obs(env_ids)
 
@@ -81,3 +104,21 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     ###############################################################
     def draw_task(self):
         return
+
+
+def get_text_embedding(text_command="a person is walking upright",
+                       device: torch.device = torch.device('cuda:0')):
+    from transformers import AutoTokenizer, XCLIPTextModel
+
+    model = XCLIPTextModel.from_pretrained("microsoft/xclip-base-patch32")
+    tokenizer = AutoTokenizer.from_pretrained("microsoft/xclip-base-patch32")
+
+    text_command = [text_command]
+    with torch.inference_mode():
+        inputs = tokenizer(
+            text_command, padding=True, truncation=True, return_tensors="pt"
+        )
+        outputs = model(**inputs)
+        pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        text_embedding = pooled_output[0].to(device)
+        return text_embedding

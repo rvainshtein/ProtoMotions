@@ -49,6 +49,7 @@ from phys_anim.envs.humanoid.common import Humanoid
 from phys_anim.utils.running_mean_std import RunningMeanStd
 from phys_anim.agents.callbacks.base_callback import RL_EvalCallback
 from rich.progress import track
+from tqdm import tqdm
 
 
 def get_params(obj) -> List[nn.Parameter]:
@@ -262,8 +263,8 @@ class PPO:
 
             training_log_dict = {}
             for batch_idx in track(
-                range(self.max_num_batches()),
-                description=f"Epoch {self.current_epoch}, training...",
+                    range(self.max_num_batches()),
+                    description=f"Epoch {self.current_epoch}, training...",
             ):
                 iter_log_dict = self.training_step(batch_idx)
 
@@ -292,17 +293,17 @@ class PPO:
                 self.save()
 
             if (
-                self.config.eval_metrics_every is not None
-                and self.current_epoch > 0
-                and self.current_epoch % self.config.eval_metrics_every == 0
+                    self.config.eval_metrics_every is not None
+                    and self.current_epoch > 0
+                    and self.current_epoch % self.config.eval_metrics_every == 0
             ):
                 eval_log_dict, evaluated_score = self.calc_eval_metrics()
                 # Rank 0 will broadcast the best score to all ranks. This ensures all ranks are synchronized before saving.
                 evaluated_score = self.fabric.broadcast(evaluated_score, src=0)
                 if evaluated_score is not None:
                     if (
-                        self.best_evaluated_score is None
-                        or evaluated_score >= self.best_evaluated_score
+                            self.best_evaluated_score is None
+                            or evaluated_score >= self.best_evaluated_score
                     ):
                         self.best_evaluated_score = evaluated_score
                         self.save(new_high_score=True)
@@ -329,8 +330,8 @@ class PPO:
         actor_state = self.create_actor_state()
 
         for i in track(
-            range(self.num_steps),
-            description=f"Epoch {self.current_epoch}, collecting data...",
+                range(self.num_steps),
+                description=f"Epoch {self.current_epoch}, collecting data...",
         ):
             actor_state["step"] = i
 
@@ -360,9 +361,9 @@ class PPO:
             self.critic_optimizer.zero_grad()
 
         is_accumulating = (
-            ((batch_idx + 1) % self.config.gradient_accumulation_steps != 0)
-            or self.config.gradient_accumulation_steps <= 0
-        ) and ((batch_idx + 1) < self.ac_max_num_batches())
+                                  ((batch_idx + 1) % self.config.gradient_accumulation_steps != 0)
+                                  or self.config.gradient_accumulation_steps <= 0
+                          ) and ((batch_idx + 1) < self.ac_max_num_batches())
         num_accumulation_steps = min(
             self.config.gradient_accumulation_steps, self.ac_max_num_batches()
         )
@@ -558,7 +559,7 @@ class PPO:
         if self.config.normalize_advantage:
             if not self.use_rand_action_masks:
                 advantages = (advantages - advantages.mean()) / (
-                    advantages.std() + 1e-8
+                        advantages.std() + 1e-8
                 )
             else:
                 adv_mask = (self.experience_buffer.rand_action_mask != 0).float()
@@ -606,7 +607,7 @@ class PPO:
 
         if self.config.bounds_loss_coef > 0:
             bounds_loss: Tensor = (
-                self.bounds_loss(actor_outs["mus"]) * self.config.bounds_loss_coef
+                    self.bounds_loss(actor_outs["mus"]) * self.config.bounds_loss_coef
             )
         else:
             bounds_loss = torch.zeros(self.num_envs, device=self.device)
@@ -642,10 +643,10 @@ class PPO:
     def bounds_loss(self, mu: Tensor) -> Tensor:
         soft_bound = 1.0
         mu_loss_high = (
-            torch.maximum(mu - soft_bound, torch.tensor(0, device=self.device)) ** 2
+                torch.maximum(mu - soft_bound, torch.tensor(0, device=self.device)) ** 2
         )
         mu_loss_low = (
-            torch.minimum(mu + soft_bound, torch.tensor(0, device=self.device)) ** 2
+                torch.minimum(mu + soft_bound, torch.tensor(0, device=self.device)) ** 2
         )
         b_loss = (mu_loss_low + mu_loss_high).sum(axis=-1)
         return b_loss
@@ -659,7 +660,7 @@ class PPO:
     def critic_step(self, batch_idx) -> Tuple[Tensor, Dict]:
         batch_dict = self.actor_critic_dataset[
             batch_idx % len(self.actor_critic_dataset)
-        ]
+            ]
         values = self.critic_train_forward(batch_dict)
 
         if self.config.clip_critic_loss:
@@ -679,7 +680,7 @@ class PPO:
         return critic_loss, log_dict
 
     def actor_loss(
-        self, old_action_neglogprobs, action_neglogprobs, advantage, curr_e_clip
+            self, old_action_neglogprobs, action_neglogprobs, advantage, curr_e_clip
     ):
         # = p(actions) / p_old(actions)
         ratio = torch.exp(old_action_neglogprobs - action_neglogprobs)
@@ -762,8 +763,8 @@ class PPO:
 
         if self.config.check_grad_mag:
             bad_grads = (
-                torch.isnan(actor_grad_norm_before_clip)
-                or actor_grad_norm_before_clip > 1000000.0
+                    torch.isnan(actor_grad_norm_before_clip)
+                    or actor_grad_norm_before_clip > 1000000.0
             )
         else:
             bad_grads = torch.isnan(actor_grad_norm_before_clip)
@@ -813,8 +814,8 @@ class PPO:
 
         if self.config.check_grad_mag:
             bad_grads = (
-                torch.isnan(critic_grad_norm_before_clip)
-                or critic_grad_norm_before_clip > 1000000.0
+                    torch.isnan(critic_grad_norm_before_clip)
+                    or critic_grad_norm_before_clip > 1000000.0
             )
         else:
             bad_grads = torch.isnan(critic_grad_norm_before_clip)
@@ -867,9 +868,9 @@ class PPO:
             "info/episode_length": self.episode_length_meter.get_mean().item(),
             "info/episode_reward": self.episode_reward_meter.get_mean().item(),
             "info/frames": torch.tensor(self.step_count),
-            "info/gframes": torch.tensor(self.step_count / (10**9)),
+            "info/gframes": torch.tensor(self.step_count / (10 ** 9)),
             "times/fps_last_epoch": self.get_step_count_increment()
-            / (end_time - self.epoch_start_time),
+                                    / (end_time - self.epoch_start_time),
             "times/fps_total": self.step_count / (end_time - self.fit_start_time),
             "times/training_hours": (end_time - self.fit_start_time) / 3600,
             "times/training_minutes": (end_time - self.fit_start_time) / 60,
@@ -916,16 +917,16 @@ class PPO:
         actor_state = self.create_actor_state()
         step = 0
         games_count = 0
+        print("Evaluating policy...")
         while (
-            not actor_state["stop"]
-            and (self.config.num_games is None or games_count < self.config.num_games)
-            and (
-                self.config.max_eval_steps is None or step < self.config.max_eval_steps
-            )
+                not actor_state["stop"]
+                and (self.config.num_games is None or games_count < self.config.num_games)
+                and (
+                        self.config.max_eval_steps is None or step < self.config.max_eval_steps
+                )
         ):
             actor_state["step"] = step
             actor_state["games_count"] = games_count
-
             actor_state = self.handle_reset(actor_state)
 
             # Invoke actor and critic, generate actions/values
@@ -983,7 +984,7 @@ class PPO:
 
     def create_eval_callbacks(self):
         if self.config.eval_callbacks is not None:
-            for cb in self.config.eval_callbacks:
+            for cb in self.config.eval_callbacks.values():
                 self.eval_callbacks.append(instantiate(cb, training_loop=self))
 
     def eval(self):
@@ -1002,7 +1003,7 @@ class PPO:
 
     def get_step_count_increment(self):
         return (
-            self.num_steps * self.num_envs * self.fabric.world_size
+                self.num_steps * self.num_envs * self.fabric.world_size
         )  # fabric.world_size = num gpu * num nodes
 
     def ac_max_num_batches(self):

@@ -1,4 +1,7 @@
 # @package _global_
+defaults:
+  - /env/inversion/base
+
 # Env structure
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.path_follower.${backbone}.MaskedMimicPathFollowingHumanoid
@@ -7,7 +10,7 @@ env:
     max_episode_length: 300
 
     path_follower_params:
-      num_traj_samples: 10
+      num_traj_samples: ${eval:${env.config.mimic_target_pose.num_future_steps}+1}
       fail_dist: 4.
       fail_height_dist: 0.5
       traj_sample_timestep: 0.5
