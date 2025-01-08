@@ -23,14 +23,17 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
     ):
         super().__init__(config=config, device=device, motion_lib=motion_lib)
         self.path_obs = torch.zeros(
-            (
-                self.config.num_envs,
-                self.config.path_follower_params.path_obs_size,
-            ),
+            self.config.num_envs,
+            self.config.path_follower_params.path_obs_size,
             device=device,
             dtype=torch.float,
         )
         self.inversion_obs = self.path_obs
+
+        self._num_traj_samples = self.config.path_follower_params.num_traj_samples
+        self._traj_sample_timestep = self.config.path_follower_params.traj_sample_timestep
+
+        self.condition_body_part = "Head"
 
         self._fail_dist = 4.0
         self._fail_height_dist = 0.5
@@ -50,6 +53,49 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
     ###############################################################
     # Environment step logic
     ###############################################################
+    def compute_task_obs(self, env_ids=None):
+        super().compute_task_obs(env_ids)
+
+        bodies_positions = self.get_body_positions()
+
+        if env_ids is None:
+            root_states = self.get_humanoid_root_states()
+            head_position = bodies_positions[:, self.head_body_id, :]
+            ground_below_head = torch.min(bodies_positions, dim=1).values[..., 2]
+        else:
+            root_states = self.get_humanoid_root_states()[env_ids]
+            head_position = bodies_positions[env_ids, self.head_body_id, :]
+            ground_below_head = torch.min(bodies_positions[env_ids], dim=1).values[..., 2]
+
+        if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
+            reset_head_position = bodies_positions[
+                                  self.reset_path_ids, self.head_body_id, :
+                                  ]
+            flat_reset_head_position = reset_head_position.view(-1, 3)
+            ground_below_reset_head = self.get_ground_heights(
+                bodies_positions[:, self.head_body_id, :2]
+            )[self.reset_path_ids]
+            flat_reset_head_position[..., 2] -= ground_below_reset_head.view(-1)
+            self.path_generator.reset(self.reset_path_ids, flat_reset_head_position)
+
+            self.reset_path_ids = None
+
+        traj_samples = self.fetch_path_samples(env_ids)
+
+        flat_head_position = head_position.view(-1, 3)
+        flat_head_position[..., 2] -= ground_below_head.view(-1)
+
+        obs = compute_path_observations(
+            root_states,
+            flat_head_position,
+            traj_samples,
+            self.w_last,
+            self.config.path_follower_params.height_conditioned,
+        )
+
+        self.path_obs[env_ids] = obs
+        self.inversion_obs = self.path_obs
+
     def compute_reward(self, actions):
         bodies_positions = self.get_body_positions()
         head_position = bodies_positions[:, self.head_body_id, :]
@@ -63,6 +109,36 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         self.rew_buf[:] = compute_path_reward(
             head_position, tar_pos, self.config.path_follower_params.height_conditioned
+        )
+
+    def compute_reset(self):
+        time = self.progress_buf * self.dt
+        env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        tar_pos = self.path_generator.calc_pos(env_ids, time)
+
+        bodies_positions = self.get_body_positions()
+        bodies_contact_buf = self.get_bodies_contact_buf()
+
+        bodies_positions[..., 2] -= (
+            torch.min(bodies_positions, dim=1).values[:, 2].view(-1, 1)
+        )
+
+        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(
+            self.reset_buf,
+            self.progress_buf,
+            bodies_contact_buf,
+            self.non_termination_contact_body_ids,
+            bodies_positions,
+            tar_pos,
+            self.config.max_episode_length,
+            self._fail_dist,
+            self._fail_height_dist,
+            self.config.enable_height_termination,
+            self.config.path_follower_params.enable_path_termination,
+            self.config.path_follower_params.height_conditioned,
+            self.termination_heights
+            + self.get_ground_heights(bodies_positions[:, self.head_body_id, :2]),
+            self.head_body_id,
         )
 
     def compute_observations(self, env_ids=None):
@@ -93,7 +169,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             )
 
             self.reset_path_ids = None
-        traj_samples, traj_samples_p1 = self.fetch_path_samples(env_ids)
+        traj_samples, traj_samples_p1 = self.fetch_path_samples_chen(env_ids)
         dir_p_to_p_1 = traj_samples_p1[..., :2] - traj_samples[..., :2]
         dir_p_to_p_1_flat = dir_p_to_p_1.view(-1, 2)
         angle = rotations.vec_to_heading(dir_p_to_p_1_flat).view(
@@ -130,9 +206,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.target_pose_joints[:, body_index * 2 + 1] = True
         # self.target_pose_joints[:, -2:] = True  # heading & speed
         self.target_pose_time[:] = self.motion_times + self._traj_sample_timestep
-        target_poses = self.build_sparse_target_path_poses_masked_with_time(
-            traj_samples, direction
-        )
+        target_poses = self.build_sparse_target_path_poses_masked_with_time(traj_samples, direction, env_ids)
         self.masked_mimic_target_poses[:] = target_poses
         self.masked_mimic_target_poses_masks[:] = True
         # self.masked_mimic_target_poses_masks[:, 5] = True
@@ -144,81 +218,6 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
                 > 0.4
         )
         self.masked_mimic_target_poses_masks[too_far, :-1] = False
-
-    def compute_reset(self):
-        time = self.progress_buf * self.dt
-        env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
-        tar_pos = self.path_generator.calc_pos(env_ids, time)
-
-        bodies_positions = self.get_body_positions()
-        bodies_contact_buf = self.get_bodies_contact_buf()
-
-        bodies_positions[..., 2] -= (
-            torch.min(bodies_positions, dim=1).values[:, 2].view(-1, 1)
-        )
-
-        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(
-            self.reset_buf,
-            self.progress_buf,
-            bodies_contact_buf,
-            self.non_termination_contact_body_ids,
-            bodies_positions,
-            tar_pos,
-            self.config.max_episode_length,
-            self._fail_dist,
-            self._fail_height_dist,
-            self.config.enable_height_termination,
-            self.config.path_follower_params.enable_path_termination,
-            self.config.path_follower_params.height_conditioned,
-            self.termination_heights
-            + self.get_ground_heights(bodies_positions[:, self.head_body_id, :2]),
-            self.head_body_id,
-        )
-
-    def compute_task_obs(self, env_ids=None):
-        super().compute_task_obs(env_ids)
-
-        bodies_positions = self.get_body_positions()
-
-        if env_ids is None:
-            root_states = self.get_humanoid_root_states()
-            head_position = bodies_positions[:, self.head_body_id, :]
-            ground_below_head = torch.min(bodies_positions, dim=1).values[..., 2]
-        else:
-            root_states = self.get_humanoid_root_states()[env_ids]
-            head_position = bodies_positions[env_ids, self.head_body_id, :]
-            ground_below_head = torch.min(bodies_positions[env_ids], dim=1).values[
-                ..., 2
-            ]
-
-        if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
-            reset_head_position = bodies_positions[
-                                  self.reset_path_ids, self.head_body_id, :
-                                  ]
-            flat_reset_head_position = reset_head_position.view(-1, 3)
-            ground_below_reset_head = self.get_ground_heights(
-                bodies_positions[:, self.head_body_id, :2]
-            )[self.reset_path_ids]
-            flat_reset_head_position[..., 2] -= ground_below_reset_head.view(-1)
-            self.path_generator.reset(self.reset_path_ids, flat_reset_head_position)
-
-            self.reset_path_ids = None
-
-        traj_samples = self.fetch_path_samples(env_ids)
-
-        flat_head_position = head_position.view(-1, 3)
-        flat_head_position[..., 2] -= ground_below_head.view(-1)
-
-        obs = compute_path_observations(
-            root_states,
-            flat_head_position,
-            traj_samples,
-            self.w_last,
-            self.config.path_follower_params.height_conditioned,
-        )
-
-        self.path_obs[env_ids] = obs
-        self.inversion_obs = self.path_obs
 
     ###############################################################
     # Helpers
@@ -240,11 +239,9 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         timestep_beg = self.progress_buf[env_ids] * self.dt
         timesteps = torch.arange(
-            self.config.path_follower_params.num_traj_samples,
-            device=self.device,
-            dtype=torch.float,
+            self._num_traj_samples, device=self.device, dtype=torch.float
         )
-        timesteps = timesteps * self.config.path_follower_params.traj_sample_timestep
+        timesteps = timesteps * self._traj_sample_timestep
         traj_timesteps = timestep_beg.unsqueeze(-1) + timesteps
 
         env_ids_tiled = torch.broadcast_to(env_ids.unsqueeze(-1), traj_timesteps.shape)
@@ -256,12 +253,297 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             traj_samples_flat,
             shape=(
                 env_ids.shape[0],
-                self.config.path_follower_params.num_traj_samples,
+                self._num_traj_samples,
                 traj_samples_flat.shape[-1],
             ),
         )
 
         return traj_samples
+
+    def fetch_path_samples_chen(self, env_ids=None, time_offset=10):
+        # 5 seconds with 0.5 second intervals, 10 samples.
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+
+        timestep_beg = self.progress_buf[env_ids] * self.dt
+        timesteps = torch.arange(
+            self._num_traj_samples, device=self.device, dtype=torch.float
+        )
+        if time_offset == 0:
+            timesteps = timesteps * self._traj_sample_timestep
+        else:
+            timesteps = (timesteps + 1) * self.dt
+            timesteps[-1] += self._traj_sample_timestep
+        timesteps_p1 = timesteps + self.dt
+        traj_timesteps = timestep_beg.unsqueeze(-1) + timesteps
+        traj_timesteps_p1 = timestep_beg.unsqueeze(-1) + timesteps_p1
+
+        env_ids_tiled = torch.broadcast_to(env_ids.unsqueeze(-1), traj_timesteps.shape)
+
+        traj_samples_flat = self.path_generator.calc_pos(
+            env_ids_tiled.flatten(), traj_timesteps.flatten()
+        ).clone()
+        traj_samples_p1_flat = self.path_generator.calc_pos(
+            env_ids_tiled.flatten(), traj_timesteps_p1.flatten()
+        ).clone()
+        traj_samples = torch.reshape(
+            traj_samples_flat,
+            shape=(
+                env_ids.shape[0],
+                self._num_traj_samples,
+                traj_samples_flat.shape[-1],
+            ),
+        )
+        traj_samples_p1 = torch.reshape(
+            traj_samples_p1_flat,
+            shape=(
+                env_ids.shape[0],
+                self._num_traj_samples,
+                traj_samples_p1_flat.shape[-1],
+            ),
+        )
+
+        return traj_samples, traj_samples_p1
+
+    def build_sparse_target_path_poses(self, raw_future_times, target_root_pos, target_root_rot, env_ids):
+        """
+        This is identical to the max_coords humanoid observation, only in relative to the current pose.
+        """
+        num_future_steps = raw_future_times.shape[1]
+
+        motion_ids = self.motion_ids.unsqueeze(-1).tile([1, num_future_steps])
+        flat_ids = motion_ids.view(-1)
+
+        lengths = self.motion_lib.get_motion_length(flat_ids)
+
+        flat_times = torch.minimum(raw_future_times.view(-1), lengths)
+
+        ref_state = self.motion_lib.get_mimic_motion_state(flat_ids, flat_times)
+        flat_target_pos, flat_target_rot, flat_target_vel = (
+            ref_state.rb_pos,
+            ref_state.rb_rot,
+            ref_state.rb_vel,
+        )
+
+        current_state = self.get_bodies_state()
+        cur_gt, cur_gr = current_state.body_pos, current_state.body_rot
+        # First remove the height based on the current terrain, then remove the offset to get back to the ground-truth data position
+        cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
+            self.num_envs, 1, 1
+        )
+
+        # override to set the target root parameters
+        reshaped_target_pos = flat_target_pos.reshape(
+            self.num_envs, num_future_steps, -1, 3
+        )
+        reshaped_target_rot = flat_target_rot.reshape(
+            self.num_envs, num_future_steps, -1, 4
+        )
+
+        body_part = self.gym.find_asset_rigid_body_index(
+            self.humanoid_asset, self.condition_body_part
+        )
+
+        if env_ids is None:
+            reshaped_target_pos[:, :, body_part, :3] = target_root_pos[..., :3]
+            reshaped_target_rot[:, :, body_part] = target_root_rot[:]
+        else:
+            reshaped_target_pos[env_ids, :, body_part, :3] = target_root_pos[env_ids, ..., :3]
+            reshaped_target_rot[env_ids, :, body_part] = target_root_rot[env_ids]
+
+        # reshaped_target_pos[:, :, body_part, -1] = 0.92  # standing up
+
+        flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
+        flat_target_rot = reshaped_target_rot.reshape(flat_target_rot.shape)
+        # override to set the target root parameters
+
+        expanded_body_pos = cur_gt.unsqueeze(1).expand(
+            self.num_envs, num_future_steps, *cur_gt.shape[1:]
+        )
+        expanded_body_rot = cur_gr.unsqueeze(1).expand(
+            self.num_envs, num_future_steps, *cur_gr.shape[1:]
+        )
+
+        if env_ids is None:
+            flat_cur_pos = expanded_body_pos.reshape(flat_target_pos.shape)
+            flat_cur_rot = expanded_body_rot.reshape(flat_target_rot.shape)
+        else:
+            flat_cur_pos = expanded_body_pos[env_ids].reshape((-1, *flat_target_pos.shape[1:]))
+            flat_cur_rot = expanded_body_rot[env_ids].reshape((-1, *flat_target_rot.shape[1:]))
+            
+        # if env_ids is None:
+        #     root_pos = flat_cur_pos[:, 0, :]
+        #     root_rot = flat_cur_rot[:, 0, :]
+        # else:
+        #     root_pos = flat_cur_pos[env_ids, 0, :]
+        #     root_rot = flat_cur_rot[env_ids, 0, :]
+        root_pos = flat_cur_pos[:, 0, :]
+        root_rot = flat_cur_rot[:, 0, :]
+        heading_rot = torch_utils.calc_heading_quat_inv(root_rot, self.w_last)
+
+        heading_rot_expand = heading_rot.unsqueeze(-2)
+        heading_rot_expand = heading_rot_expand.repeat((1, flat_cur_pos.shape[1], 1))
+        flat_heading_rot = heading_rot_expand.reshape(
+            heading_rot_expand.shape[0] * heading_rot_expand.shape[1],
+            heading_rot_expand.shape[2],
+        )
+
+        root_pos_expand = root_pos.unsqueeze(-2)
+
+        """target"""
+        # target body pos   [N, 3xB]
+        target_rel_body_pos = flat_target_pos - flat_cur_pos
+        flat_target_rel_body_pos = target_rel_body_pos.reshape(
+            target_rel_body_pos.shape[0] * target_rel_body_pos.shape[1],
+            target_rel_body_pos.shape[2],
+        )
+        flat_target_rel_body_pos = torch_utils.quat_rotate(
+            flat_heading_rot, flat_target_rel_body_pos, self.w_last
+        )
+
+        # target body pos   [N, 3xB]
+        flat_target_body_pos = (flat_target_pos - root_pos_expand).reshape(
+            flat_target_pos.shape[0] * flat_target_pos.shape[1],
+            flat_target_pos.shape[2],
+        )
+        flat_target_body_pos = torch_utils.quat_rotate(
+            flat_heading_rot, flat_target_body_pos, self.w_last
+        )
+
+        # target body rot   [N, 6xB]
+        target_rel_body_rot = rotations.quat_mul(
+            rotations.quat_conjugate(flat_cur_rot, self.w_last),
+            flat_target_rot,
+            self.w_last,
+        )
+        target_rel_body_rot_obs = torch_utils.quat_to_tan_norm(
+            target_rel_body_rot.view(-1, 4), self.w_last
+        ).view(target_rel_body_rot.shape[0], -1)
+
+        # target body rot   [N, 6xB]
+        target_body_rot = rotations.quat_mul(
+            heading_rot_expand, flat_target_rot, self.w_last
+        )
+        target_body_rot_obs = torch_utils.quat_to_tan_norm(
+            target_body_rot.view(-1, 4), self.w_last
+        ).view(target_rel_body_rot.shape[0], -1)
+
+        padded_flat_target_rel_body_pos = torch.nn.functional.pad(
+            flat_target_rel_body_pos, [0, 3], "constant", 0
+        )
+        sub_sampled_target_rel_body_pos = padded_flat_target_rel_body_pos.reshape(
+            self.num_envs, num_future_steps, -1, 6
+        )[:, :, self.masked_mimic_conditionable_bodies_ids]
+
+        padded_flat_target_body_pos = torch.nn.functional.pad(
+            flat_target_body_pos, [0, 3], "constant", 0
+        )
+        sub_sampled_target_body_pos = padded_flat_target_body_pos.reshape(
+            self.num_envs, num_future_steps, -1, 6
+        )[:, :, self.masked_mimic_conditionable_bodies_ids]
+
+        sub_sampled_target_rel_body_rot_obs = target_rel_body_rot_obs.reshape(
+            self.num_envs, num_future_steps, -1, 6
+        )[:, :, self.masked_mimic_conditionable_bodies_ids]
+        sub_sampled_target_body_rot_obs = target_body_rot_obs.reshape(
+            self.num_envs, num_future_steps, -1, 6
+        )[:, :, self.masked_mimic_conditionable_bodies_ids]
+
+        # Heading
+        target_heading_rot = torch_utils.calc_heading_quat(
+            flat_target_rot[:, 0, :], self.w_last
+        )
+        target_rel_heading_rot = torch_utils.quat_to_tan_norm(
+            rotations.quat_mul(
+                heading_rot_expand[:, 0, :], target_heading_rot, self.w_last
+            ).view(-1, 4),
+            self.w_last,
+        ).reshape(self.num_envs, num_future_steps, 1, 6)
+
+        # Velocity
+        target_root_vel = flat_target_vel[:, 0, :]
+        target_root_vel[..., -1] = 0  # ignore vertical speed
+        target_rel_vel = rotations.quat_rotate(
+            heading_rot, target_root_vel, self.w_last
+        ).reshape(-1, 3)
+        padded_target_rel_vel = torch.nn.functional.pad(
+            target_rel_vel, [0, 3], "constant", 0
+        )
+        padded_target_rel_vel = padded_target_rel_vel.reshape(
+            self.num_envs, num_future_steps, 1, 6
+        )
+
+        heading_and_velocity = torch.cat(
+            [
+                target_rel_heading_rot,
+                target_rel_heading_rot,
+                padded_target_rel_vel,
+                padded_target_rel_vel,
+            ],
+            dim=-1,
+        )
+
+        # In masked_mimic allow easy re-shape to [batch, time, joint, type (transform/rotate), features]
+        obs = torch.cat(
+            (
+                sub_sampled_target_rel_body_pos,
+                sub_sampled_target_body_pos,
+                sub_sampled_target_rel_body_rot_obs,
+                sub_sampled_target_body_rot_obs,
+            ),
+            dim=-1,
+        )  # [batch, timesteps, joints, 24]
+        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(self.num_envs, -1)
+
+        return obs
+
+    def build_sparse_target_path_poses_masked_with_time(self, target_root_pos: Tensor, target_root_rot: Tensor,
+                                                        env_ids):
+        num_future_steps = target_root_pos.shape[1] - 1
+        time_offsets = (
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
+        )
+
+        near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
+        all_future_times = torch.cat(
+            [near_future_times, self.target_pose_time.view(-1, 1)], dim=1
+        )
+
+        env_dim = self.num_envs if env_ids is not None else len(env_ids)
+
+        obs = self.build_sparse_target_path_poses(all_future_times, target_root_pos, target_root_rot, env_ids).view(
+            env_dim,
+            num_future_steps + 1,
+            self.masked_mimic_conditionable_bodies_ids.shape[0] + 1,
+            2,
+            12,
+        )
+
+        near_mask = self.masked_mimic_target_bodies_masks.view(
+            env_dim, num_future_steps, self.num_conditionable_bodies, 2, 1
+        )
+        far_mask = self.target_pose_joints.view(env_dim, 1, -1, 2, 1)
+        mask = torch.cat([near_mask, far_mask], dim=1)
+
+        masked_obs = obs * mask
+
+        masked_obs_with_joints = torch.cat((masked_obs, mask), dim=-1).view(
+            env_dim, num_future_steps + 1, -1
+        )
+
+        times = all_future_times.view(-1).view(
+            env_dim, num_future_steps + 1, 1
+        ) - self.motion_times.view(env_dim, 1, 1)
+        ones_vec = torch.ones(
+            env_dim, num_future_steps + 1, 1, device=self.device
+        )
+        times_with_mask = torch.cat((times, ones_vec), dim=-1)
+        combined_sparse_future_pose_obs = torch.cat(
+            (masked_obs_with_joints, times_with_mask), dim=-1
+        )
+
+        return combined_sparse_future_pose_obs.view(env_dim, -1)
 
 
 @torch.jit.script
