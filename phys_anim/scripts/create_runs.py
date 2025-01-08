@@ -22,14 +22,12 @@ def main():
                         current_exp = experiment_arg.format(env)
                         experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
                         current_run_command += (
-                            f" +experiment_name={experiment_name}" + "_${seed}"
+                            f" experiment_name={experiment_name}" + "_${seed}"
                         )
-                        extra_args = f" +env.config.use_chens_prior={prior_flag}"
-                        extra_args += f" +env.config.use_text={text_flag}"
+                        extra_args = f" env.config.use_chens_prior={prior_flag}"
+                        extra_args += f" env.config.use_text={text_flag}"
                         if current_pose:
-                            extra_args += (
-                                f" +env.config.use_current_pose_obs={current_pose}"
-                            )
+                            extra_args += f" env.config.steering_params.use_current_pose_obs={current_pose}"
                             extra_args += " algo.config.models.extra_input_obs_size=11"
                         if bigger_model:
                             extra_args += " algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"
