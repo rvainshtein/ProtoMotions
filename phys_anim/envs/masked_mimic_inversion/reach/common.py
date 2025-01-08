@@ -56,7 +56,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         self._failures = []
         self._distances = []
         self._current_accumulated_errors = (
-                torch.zeros([self.num_envs], device=self.device, dtype=torch.float) - 1
+            torch.zeros([self.num_envs], device=self.device, dtype=torch.float) - 1
         )
         self._current_failures = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.float
@@ -81,11 +81,11 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
                 ~self._last_failures[env_ids]
             )
             average_distances = self._current_accumulated_errors[env_ids][
-                                    active_envs
-                                ] / (
-                                        self._last_length[env_ids][active_envs]
-                                        - self._tar_reach_steps[env_ids][active_envs]
-                                )
+                active_envs
+            ] / (
+                self._last_length[env_ids][active_envs]
+                - self._tar_reach_steps[env_ids][active_envs]
+            )
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
             self._failures.extend(
@@ -99,12 +99,12 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
 
         rand_pos = torch.rand([n, 3], device=self.device)
         rand_pos[..., 0:2] = self.config.reach_params.tar_dist_max * (
-                1.5 * rand_pos[..., 0:2] - 0.75
+            1.5 * rand_pos[..., 0:2] - 0.75
         )
         rand_pos[..., 2] = (
-                                   self.config.reach_params.tar_height_max
-                                   - self.config.reach_params.tar_height_min
-                           ) * rand_pos[..., 2] + self.config.reach_params.tar_height_min
+            self.config.reach_params.tar_height_max
+            - self.config.reach_params.tar_height_min
+        ) * rand_pos[..., 2] + self.config.reach_params.tar_height_min
 
         change_steps = torch.randint(
             low=self.config.reach_params.change_steps_min,
@@ -170,7 +170,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
             measurement_started
         ]
         self._current_failures[measurement_started] += (
-                distance_to_target[measurement_started] > 0.5
+            distance_to_target[measurement_started] > 0.5
         )
         print(
             f"Measurement started: {measurement_started[0]} , failed {self._current_failures[0] > 0}"
@@ -194,7 +194,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
 
         self.compute_priors(env_ids)
 
-    def create_chens_prior(self):
+    def create_chens_prior(self, env_ids):
         reach_steps_left = (self._tar_reach_steps - self.progress_buf - 10).clamp(
             min=3
         )  # just incase keep above 0 to ensure it isn't hidden
@@ -385,8 +385,8 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
 
     def build_sparse_target_reach_poses_masked_with_time(self, num_future_steps):
         time_offsets = (
-                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-                * self.dt
+            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+            * self.dt
         )
 
         near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)

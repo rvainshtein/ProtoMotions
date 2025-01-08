@@ -34,8 +34,12 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
         self._text_embedding = None
         if self.config.get("use_text", False):
-            self.text_command = self.config.get("text_command", "a person is walking upright")
-            text_embedding = get_text_embedding(text_command=self.text_command, device=self.device)
+            self.text_command = self.config.get(
+                "text_command", "a person is walking upright"
+            )
+            text_embedding = get_text_embedding(
+                text_command=self.text_command, device=self.device
+            )
             self._text_embedding = text_embedding
 
     ###############################################################
@@ -59,7 +63,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     ###############################################################
     # Environment step logic
     ###############################################################
-    def create_chens_prior(self):
+    def create_chens_prior(self, env_ids):
         raise NotImplementedError
 
     def compute_observations(self, env_ids=None):
@@ -106,8 +110,10 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         return
 
 
-def get_text_embedding(text_command="a person is walking upright",
-                       device: torch.device = torch.device('cuda:0')):
+def get_text_embedding(
+    text_command="a person is walking upright",
+    device: torch.device = torch.device("cuda:0"),
+):
     from transformers import AutoTokenizer, XCLIPTextModel
 
     model = XCLIPTextModel.from_pretrained("microsoft/xclip-base-patch32")
