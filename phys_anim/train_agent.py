@@ -29,10 +29,9 @@
 import os
 import sys
 from pathlib import Path
-
+import logging
 import hydra
 from hydra.utils import instantiate
-from omegaconf import OmegaConf
 
 has_robot_arg = False
 backbone = None
@@ -56,17 +55,16 @@ for arg in sys.argv:
 
             backbone = "isaacsim"
 
+import wandb
+from wandb.integration.lightning.fabric.logger import WandbLogger
 import torch  # noqa: E402
 from lightning.fabric import Fabric  # noqa: E402
-from wandb.integration.lightning.fabric.logger import WandbLogger
 from utils.config_utils import *  # noqa: E402, F403
 from utils.common import seeding
 
-from phys_anim.agents.callbacks.slurm_autoresume import (
-    SlurmAutoResume,
-)  # noqa: E402
-
 from phys_anim.agents.ppo import PPO  # noqa: E402
+
+log = logging.getLogger(__name__)
 
 
 @hydra.main(config_path="config", config_name="base")
@@ -74,21 +72,25 @@ def main(config: OmegaConf):
     # resolve=False is important otherwise overrides
     # at inference time won't work properly
     # also, I believe this must be done before instantiation
-
     unresolved_conf = OmegaConf.to_container(config, resolve=False)
     os.chdir(hydra.utils.get_original_cwd())
 
-    autoresume = SlurmAutoResume()
-    id = autoresume.details.get("id")
-    if (
-            id is not None
-            and "wandb" in config
-            and OmegaConf.select(config, "wandb.wandb_id", default=None) is None
-    ):
-        config = OmegaConf.merge(config, OmegaConf.create({"wandb": {"wandb_id": id}}))
-
     torch.set_float32_matmul_precision("medium")
 
+    save_dir = Path(config.save_dir)
+    pre_existing_checkpoint = save_dir / "last.ckpt"
+    checkpoint_config_path = save_dir / "config.yaml"
+    if pre_existing_checkpoint.exists():
+        log.info(f"Found latest checkpoint at {pre_existing_checkpoint}")
+        # Load config from checkpoint folder
+        if checkpoint_config_path.exists():
+            log.info(f"Loading config from {checkpoint_config_path}")
+            config = OmegaConf.load(checkpoint_config_path)
+
+        # Set the checkpoint path in the config
+        config.checkpoint = pre_existing_checkpoint
+
+    # Fabric should launch AFTER loading the config. This ensures that wandb parameters are loaded correctly for proper experiment resuming.
     fabric: Fabric = instantiate(config.fabric)
     fabric.launch()
 
@@ -109,26 +111,29 @@ def main(config: OmegaConf):
 
     algo: PPO = instantiate(config.algo, env=env, fabric=fabric)
     algo.setup()
-    if config.auto_load_latest:
-        latest_checkpoint = Path(fabric.loggers[0].root_dir) / "last.ckpt"
-        if latest_checkpoint.exists():
-            config.checkpoint = latest_checkpoint
+    algo.fabric.strategy.barrier()
     algo.load(config.checkpoint)
 
-    save_dir = Path(fabric.loggers[0].log_dir)
-    save_dir.mkdir(exist_ok=True, parents=True)
-    print(f"Saving config file to {save_dir}")
-    with open(save_dir / "config.yaml", "w") as file:
-        OmegaConf.save(unresolved_conf, file)
-
-    resolved_config = OmegaConf.to_container(config, resolve=True)
-    # Log the Hydra config to WandB
-    if fabric.global_rank == 0:
+    # find out wandb id and save to config.yaml if 1st run:
+    # wandb on rank 0
+    if fabric.global_rank == 0 and not checkpoint_config_path.exists():
         if "wandb" in config:
             for logger in fabric.loggers:
                 if isinstance(logger, WandbLogger):
-                    logger.config = resolved_config  # Log Hydra configuration
-                    logger.log_hyperparams(resolved_config)
+                    logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
+
+            # saving config with wandb id for next resumed run
+            wandb_id = wandb.run.id
+            log.info(f"wandb_id found {wandb_id}")
+            unresolved_conf["wandb"]["wandb_id"] = wandb_id
+
+        # only save before 1st run.
+        # note, we save unresolved config for easier inference time logic
+        log.info(f"Saving config file to {save_dir}")
+        with open(checkpoint_config_path, "w") as file:
+            OmegaConf.save(unresolved_conf, file)
+
+    algo.fabric.strategy.barrier()
 
     algo.fit()
 
