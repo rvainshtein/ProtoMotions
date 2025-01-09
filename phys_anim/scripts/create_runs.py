@@ -1,11 +1,32 @@
-def main():
-    output_file_path = "runs.txt"
-    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +opt=[full_run,wdb,slurm_autoresume]"
-    base_run_command += " algo.config.max_epochs=4000 seed=${seed} wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
-    experiment_arg = "+exp=inversion/{}"
-    extra_args = "{}"
+import os
 
-    envs = ["direction_facing"]
+
+def main():
+    DEBUG = True
+    output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
+    if os.path.exists(output_file_path):
+        os.remove(output_file_path)
+    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym"
+    max_epochs = 20 if DEBUG else 4000
+    base_run_command += f" algo.config.max_epochs={max_epochs}"
+    base_run_command += " seed=${seed}" if not DEBUG else ""
+    if not DEBUG:
+        base_run_command += " wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
+    else:
+        base_run_command += ""
+
+    experiment_arg = "+exp=inversion/{}"
+
+    extra_args = []
+
+    if DEBUG:
+        opts = ["small_run", "wdb", ]
+    else:
+        opts = ["full_run", "wdb", "slurm_autoresume"]
+
+    # envs = ["direction_facing"]
+    # envs = ["path_follower"]
+    envs = ["path_follower", "direction_facing", "steering"]
     use_chens_prior = [True, False]
     use_text = [True, False]
     use_current_pose_obs = [True, False]
@@ -17,23 +38,32 @@ def main():
             for text_flag in use_text:
                 for current_pose in use_current_pose_obs:
                     for bigger_model in use_bigger_model:
+                        current_opts = opts.copy()
+                        current_extra_args = extra_args.copy()
                         current_run_command = ""
                         current_run_command += base_run_command
                         current_exp = experiment_arg.format(env)
-                        experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
+                        current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
+
+                        if DEBUG:
+                            current_experiment_name += '_DEBUG'
+
                         current_run_command += (
-                            f" experiment_name={experiment_name}" + "_${seed}"
+                                f" experiment_name={current_experiment_name}" + "_${seed}"
                         )
-                        extra_args = f" env.config.use_chens_prior={prior_flag}"
-                        extra_args += f" env.config.use_text={text_flag}"
+                        current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
+                        current_extra_args += [f"env.config.use_text={text_flag}"]
                         if current_pose:
-                            extra_args += f" env.config.steering_params.use_current_pose_obs={current_pose}"
-                            extra_args += " algo.config.models.extra_input_obs_size=11"
+                            current_opts += ["masked_mimic/inversion/current_pose_obs"]
                         if bigger_model:
-                            extra_args += " algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"
+                            current_extra_args += [
+                                "algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"]
+                        opt_string = "+opt=[" + ','.join(current_opts) + "]"
+                        extra_args_string = ' '.join(current_extra_args)
                         current_run_command = " ".join(
-                            [current_run_command, current_exp, extra_args]
+                            [current_run_command, opt_string, current_exp, extra_args_string, ]
                         )
+
                         with open(output_file_path, "a") as f:
                             f.write(current_run_command + "\n")
 
