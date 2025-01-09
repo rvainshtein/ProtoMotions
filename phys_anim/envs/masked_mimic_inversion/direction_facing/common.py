@@ -47,7 +47,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         else:
             root_states = self.get_humanoid_root_states()[env_ids]
         facing_obs = compute_facing_observations(
-            root_states, self._tar_facing_dir, self.w_last
+            root_states, self._tar_facing_dir[env_ids], self.w_last
         )
         self.inversion_obs = torch.cat([self.direction_obs, facing_obs], dim=-1)
 
