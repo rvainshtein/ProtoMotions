@@ -22,12 +22,6 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
     def __init__(self, config, device: torch.device):
         super().__init__(config=config, device=device)
 
-        self.inversion_obs = torch.zeros(
-            (config.num_envs, config.steering_params.obs_size + 2 + self.pose_obs_size),
-            device=device,
-            dtype=torch.float,
-        )
-
         self._tar_facing_dir_theta = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.float
         )
@@ -40,16 +34,22 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             [self.num_envs], device=self.device, dtype=torch.int64
         )
 
+        self.facing_obs = torch.zeros(
+            (self.num_envs, 2), device=device, dtype=torch.float
+        )
+
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
         if env_ids is None:
-            root_states = self.get_humanoid_root_states()
-        else:
-            root_states = self.get_humanoid_root_states()[env_ids]
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        root_states = self.get_humanoid_root_states()[env_ids]
+
         facing_obs = compute_facing_observations(
             root_states, self._tar_facing_dir[env_ids], self.w_last
         )
-        self.inversion_obs = torch.cat([self.direction_obs, facing_obs], dim=-1)
+        self.facing_obs[env_ids] = facing_obs
+        self.inversion_obs[env_ids] = torch.cat(
+            [self.direction_obs[env_ids], self.facing_obs[env_ids], self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
         root_states = self.get_humanoid_root_states()
@@ -70,9 +70,9 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         # print the target speed of the env and the speed actually achieved in that direction
 
         if (
-            self.config.num_envs == 1
-            and self.config.steering_params.log_speed
-            and self.progress_buf % 3 == 0
+                self.config.num_envs == 1
+                and self.config.steering_params.log_speed
+                and self.progress_buf % 3 == 0
         ):
             print(
                 f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}'
@@ -100,13 +100,13 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             face_dir_theta = 2 * torch.pi * torch.rand(n, device=self.device) - torch.pi
         else:
             dir_delta_theta = (
-                2 * self._standard_heading_change * torch.rand(n, device=self.device)
-                - self._standard_heading_change
+                    2 * self._standard_heading_change * torch.rand(n, device=self.device)
+                    - self._standard_heading_change
             )
             # map tar_dir_theta back to [0, 2pi], add delta, project back into [0, 2pi] and then shift.
             face_dir_theta = (
-                dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
-            ) % (2 * np.pi) - np.pi
+                                     dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
+                             ) % (2 * np.pi) - np.pi
 
         face_tar_dir = torch.stack(
             [torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1
@@ -115,7 +115,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         self._tar_facing_dir_theta[env_ids] = face_dir_theta
 
         self._heading_turn_steps[env_ids] = (
-            30 * 1 + self.progress_buf[env_ids]
+                30 * 1 + self.progress_buf[env_ids]
         )  # Allow 15 frames (0.5sec) to turn.
 
     def compute_observations(self, env_ids=None):
@@ -134,10 +134,10 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             "Pelvis"
         )
         self.target_pose_time[turning_envs] = (
-            self.motion_times[turning_envs] + self.dt * time_left_to_turn[turning_envs]
+                self.motion_times[turning_envs] + self.dt * time_left_to_turn[turning_envs]
         )
         self.target_pose_time[turned_envs] = (
-            self.motion_times[turned_envs] + 1.0
+                self.motion_times[turned_envs] + 1.0
         )  # .5 second
         # self.target_pose_obs_mask[:] = True
         self.target_pose_joints[:] = False
@@ -211,9 +211,9 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         reshaped_target_pos[:, :, :, :2] = cur_gt[:, :, :2].unsqueeze(1).clone()
         for frame_idx in range(num_future_steps):
             reshaped_target_pos[:, frame_idx, :, :2] += (
-                self._tar_dir[:]
-                * self._tar_speed[:].unsqueeze(-1)
-                * (raw_future_times[:, frame_idx] - self.motion_times).unsqueeze(-1)
+                    self._tar_dir[:]
+                    * self._tar_speed[:].unsqueeze(-1)
+                    * (raw_future_times[:, frame_idx] - self.motion_times).unsqueeze(-1)
             ).unsqueeze(1)
 
         reshaped_target_pos[turning_envs, :, :, :2] = (
@@ -237,7 +237,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         )
 
         non_flat_target_vel[:, :, 0, :2] = (
-            self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1)
+                self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1)
         ).view(self._tar_dir.shape[0], 1, 2)
         flat_target_vel = non_flat_target_vel.reshape(flat_target_vel.shape)
         # override to set the target root parameters
@@ -375,8 +375,8 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
 
     def build_sparse_target_heading_poses_masked_with_time(self, num_future_steps):
         time_offsets = (
-            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-            * self.dt
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
         )
 
         near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
@@ -432,14 +432,14 @@ def compute_facing_observations(root_states, tar_face_dir, w_last: bool):
 
 @torch.jit.script
 def compute_facing_reward(
-    root_pos: Tensor,
-    prev_root_pos: Tensor,
-    root_rot: Tensor,
-    tar_dir: Tensor,
-    tar_speed: Tensor,
-    tar_face_dir: Tensor,
-    dt: float,
-    w_last: bool,
+        root_pos: Tensor,
+        prev_root_pos: Tensor,
+        root_rot: Tensor,
+        tar_dir: Tensor,
+        tar_speed: Tensor,
+        tar_face_dir: Tensor,
+        dt: float,
+        w_last: bool,
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     dir_reward, output_dict = compute_heading_reward(
         root_pos, prev_root_pos, tar_dir, tar_speed, dt

@@ -2,6 +2,7 @@
 
 env:
   config:
+    task_obs_size: ???  # fill in each env
     use_text: False
     use_chens_prior: False
     text_command: a person is walking upright
@@ -9,6 +10,7 @@ env:
     # text_command = ["a person raises both hands and walks forward"]
     # text_command = ["swinging arms up and down"]
     # text_command = ["a person walks casually"]
+
 
 eval_overrides:
   env:

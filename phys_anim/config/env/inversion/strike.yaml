@@ -5,6 +5,7 @@ defaults:
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.strike.${backbone}.MaskedMimicStrike
   config:
+    task_obs_size: ${env.config.strike_params.obs_size}
     strike_params:
       strike_body_names: ["R_Hand","R_Wrist","R_Elbow"]
       tar_dist_min: 0.5

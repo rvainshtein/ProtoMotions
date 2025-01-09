@@ -4,11 +4,6 @@ defaults:
   - /opt/masked_mimic/inversion/base
   - /env/inversion/strike
 
-algo:
-  config:
-    models:
-      extra_input_obs_size: ${env.config.strike_params.obs_size}
-
 wandb:
   wandb_tags: [ inversion, steering ]
   wandb_group: inversion_steering

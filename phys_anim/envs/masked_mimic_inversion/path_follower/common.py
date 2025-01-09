@@ -28,7 +28,6 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             device=device,
             dtype=torch.float,
         )
-        self.inversion_obs = self.path_obs
 
         self._num_traj_samples = self.config.path_follower_params.num_traj_samples
         self._traj_sample_timestep = self.config.path_follower_params.traj_sample_timestep
@@ -59,13 +58,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         bodies_positions = self.get_body_positions()
 
         if env_ids is None:
-            root_states = self.get_humanoid_root_states()
-            head_position = bodies_positions[:, self.head_body_id, :]
-            ground_below_head = torch.min(bodies_positions, dim=1).values[..., 2]
-        else:
-            root_states = self.get_humanoid_root_states()[env_ids]
-            head_position = bodies_positions[env_ids, self.head_body_id, :]
-            ground_below_head = torch.min(bodies_positions[env_ids], dim=1).values[..., 2]
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+
+        root_states = self.get_humanoid_root_states()[env_ids]
+        head_position = bodies_positions[env_ids, self.head_body_id, :]
+        ground_below_head = torch.min(bodies_positions[env_ids], dim=1).values[..., 2]
 
         if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
             reset_head_position = bodies_positions[
@@ -92,9 +89,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             self.w_last,
             self.config.path_follower_params.height_conditioned,
         )
-
         self.path_obs[env_ids] = obs
-        self.inversion_obs = self.path_obs
+        self.inversion_obs[env_ids] = torch.cat([self.path_obs[env_ids], self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
         bodies_positions = self.get_body_positions()
@@ -167,7 +163,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             )
 
             assert (
-                self.progress_buf[self.reset_path_ids] <= 1
+                    self.progress_buf[self.reset_path_ids] <= 1
             ).all(), (
                 f"Progress should be reset {self.progress_buf[self.reset_path_ids]}"
             )
@@ -212,7 +208,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.target_pose_joints[env_ids, body_index * 2 + 1] = True
         # self.target_pose_joints[:, -2:] = True  # heading & speed
         self.target_pose_time[env_ids] = (
-            self.motion_times[env_ids] + self._traj_sample_timestep
+                self.motion_times[env_ids] + self._traj_sample_timestep
         )
 
         target_poses = self.build_sparse_target_path_poses_masked_with_time(
@@ -227,8 +223,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         # self.masked_mimic_target_poses_masks[:, -1] = True
 
         too_far = (
-            torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
-            > 0.4
+                torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
+                > 0.4
         )
         self.masked_mimic_target_poses_masks[env_ids[too_far], :-1] = False
 
@@ -319,7 +315,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         return traj_samples, traj_samples_p1
 
     def build_sparse_target_path_poses(
-        self, raw_future_times, target_root_pos, target_root_rot, env_ids
+            self, raw_future_times, target_root_pos, target_root_rot, env_ids
     ):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
@@ -497,13 +493,13 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         return obs
 
     def build_sparse_target_path_poses_masked_with_time(
-        self, target_root_pos: Tensor, target_root_rot: Tensor, env_ids
+            self, target_root_pos: Tensor, target_root_rot: Tensor, env_ids
     ):
         num_envs = len(env_ids)
         num_future_steps = target_root_pos.shape[1] - 1
         time_offsets = (
-            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-            * self.dt
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
         )
 
         near_future_times = self.motion_times[env_ids].unsqueeze(

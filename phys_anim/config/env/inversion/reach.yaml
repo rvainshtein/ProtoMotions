@@ -5,6 +5,7 @@ defaults:
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.reach.${backbone}.MaskedMimicReachHumanoid
   config:
+    task_obs_size: ${env.config.reach_params.obs_size}
     text_command: a person reaches with its right hand
     reach_params:
       reach_body_name: R_Hand
@@ -15,3 +16,4 @@ env:
       tar_height_max: 1.6
       reach_steps_min: 60
       reach_steps_max: 61
+      obs_size: 3

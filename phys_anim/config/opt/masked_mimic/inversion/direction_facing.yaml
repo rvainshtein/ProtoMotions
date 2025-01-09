@@ -4,11 +4,6 @@ defaults:
   - /opt/masked_mimic/inversion/base
   - /env/inversion/direction_facing
 
-algo:
-  config:
-    models:
-      extra_input_obs_size: ${eval:${env.config.steering_params.obs_size}+2}  # 2 for direction facing
-
 wandb:
   wandb_tags: [ inversion, direction_facing ]
   wandb_group: inversion_direction_facing

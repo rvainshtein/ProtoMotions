@@ -4,10 +4,6 @@ defaults:
   - /opt/masked_mimic/inversion/base
   - /env/inversion/reach
 
-algo:
-  config:
-    models:
-      extra_input_obs_size: ${env.config.steering_params.obs_size}
 
 wandb:
   wandb_tags: [ inversion, steering ]

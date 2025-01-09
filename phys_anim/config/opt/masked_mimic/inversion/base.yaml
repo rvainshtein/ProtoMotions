@@ -4,7 +4,7 @@ algo:
   config:
     models:
       # Append the path obs to the actor and critic inputs
-      extra_input_obs_size: ??? # ${env.config.{env_params}.obs_size}
+      extra_input_obs_size: ${env.config.task_obs_size} # if /opt/inversion/pose_obs then task_obs + current_pose_size
       extra_input_model:
         _target_: phys_anim.agents.models.common.Flatten
         config:
@@ -64,6 +64,8 @@ env:
     mimic_reset_track:
       reset_on_episode_reset: False
       reset_episode_on_reset_track: False
+    current_pose_obs_type: null
+    current_pose_obs_size: 0
 
 wandb:
   wandb_tags: [inversion]

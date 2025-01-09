@@ -32,6 +32,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         super().__init__(config, device, motion_lib=motion_lib)
         self.setup_task()
 
+        self.current_pose_obs_type = self.config.get("current_pose_obs_type", None)
+
         self._text_embedding = None
         if self.config.get("use_text", False):
             self.text_command = self.config.get(
@@ -41,6 +43,30 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
                 text_command=self.text_command, device=self.device
             )
             self._text_embedding = text_embedding
+
+        self.inversion_obs = torch.zeros(
+            (self.config.num_envs, self.config.task_obs_size + self.config.current_pose_obs_size),
+            device=device,
+            dtype=torch.float,
+        )
+
+    def get_current_pose_obs(self, env_ids=None):
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+
+        global_translations = self.get_body_positions()[env_ids]
+        root_height = global_translations[env_ids, 0, 2]
+        head_height = global_translations[env_ids, self.head_id, 2]
+        root_coords = global_translations[env_ids, 0, :]
+        head_coords = global_translations[env_ids, self.head_id, :]
+
+        if self.current_pose_obs_type == 'root_head_coords':
+            current_pose_obs = torch.cat([root_coords, head_coords], dim=-1)
+        elif self.current_pose_obs_type == 'root_head_heights':
+            current_pose_obs = torch.cat([root_height.unsqueeze(-1), head_height.unsqueeze(-1)], dim=-1)
+        else:
+            current_pose_obs = torch.tensor([], device=self.device)
+        return current_pose_obs
 
     ###############################################################
     # Set up environment
@@ -90,7 +116,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         return humanoid_obs
 
     def compute_task_obs(self, env_ids=None):
-        pass
+        self.current_pose_obs = self.get_current_pose_obs(env_ids)
 
     def mask_everything(self):
         # By Default mask everything out. Individual tasks will override this.
@@ -111,8 +137,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
 
 def get_text_embedding(
-    text_command="a person is walking upright",
-    device: torch.device = torch.device("cuda:0"),
+        text_command="a person is walking upright",
+        device: torch.device = torch.device("cuda:0"),
 ):
     from transformers import AutoTokenizer, XCLIPTextModel
 

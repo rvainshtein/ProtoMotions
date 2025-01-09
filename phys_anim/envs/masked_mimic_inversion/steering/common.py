@@ -54,31 +54,13 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._standard_heading_change = self.config.steering_params.standard_heading_change
         self._standard_speed_change = self.config.steering_params.standard_speed_change
         self._stop_probability = self.config.steering_params.stop_probability
-        self.use_current_pose_obs = config.steering_params.get("use_current_pose_obs", False)
+
         if "smpl" in self.config.robot.asset.asset_file_name:
             self.head_id = self.get_body_id("Head")
 
-        if self.use_current_pose_obs:
-            self.direction_obs = torch.zeros(
-                (
-                    config.num_envs,
-                    config.steering_params.obs_size + self.get_obs_size(),
-                ),
-                device=device,
-                dtype=torch.float,
-            )
-        else:
-            self.head_id = self.get_body_id("head")
-
-        self.pose_obs_size = 6 if self.use_current_pose_obs else 0  # 2 for root and head height, 6 for root and head coords, self.get_obs_size() for full humanoid pose
-
         self.direction_obs = torch.zeros(
-            (config.num_envs, config.steering_params.obs_size + self.pose_obs_size),  # 6 for root and head coords
-            device=device,
-            dtype=torch.float,
+            [self.num_envs, self.config.steering_params.obs_size], device=self.device, dtype=torch.float
         )
-
-        self.inversion_obs = self.direction_obs
 
         self._heading_change_steps = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.int64
@@ -164,37 +146,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
-
         if env_ids is None:
-            root_states = self.get_humanoid_root_states()
-            tar_dir = self._tar_dir
-            tar_speed = self._tar_speed
-            # humanoid_obs = self.obs_buf
-            global_translations = self.get_body_positions()
-            # root_height = global_translations[:, 0, 2]
-            # head_height = global_translations[:, self.head_id, 2]
-            # humanoid_obs = torch.cat([root_height.unsqueeze(-1), head_height.unsqueeze(-1)], dim=-1)
-            root_coords = global_translations[:, 0, :]
-            head_coords = global_translations[:, self.head_id, :]
-            humanoid_obs = torch.cat([root_coords, head_coords], dim=-1)
-        else:
-            root_states = self.get_humanoid_root_states()[env_ids]
-            tar_dir = self._tar_dir[env_ids]
-            tar_speed = self._tar_speed[env_ids]
-            # humanoid_obs = self.obs_buf[env_ids]
-            global_translations = self.get_body_positions()[env_ids]
-            # root_height = global_translations[env_ids, 0, 2]
-            # head_height = global_translations[env_ids, self.head_id, 2]
-            # humanoid_obs = torch.cat([root_height.unsqueeze(-1), head_height.unsqueeze(-1)], dim=-1)
-            root_coords = global_translations[env_ids, 0, :]
-            head_coords = global_translations[env_ids, self.head_id, :]
-            humanoid_obs = torch.cat([root_coords, head_coords], dim=-1)
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+
+        root_states = self.get_humanoid_root_states()[env_ids]
+        tar_dir = self._tar_dir[env_ids]
+        tar_speed = self._tar_speed[env_ids]
 
         obs = compute_heading_observations(root_states, tar_dir, tar_speed, self.w_last)
-        if self.use_current_pose_obs:
-            obs = torch.cat([obs, humanoid_obs], dim=-1)
         self.direction_obs[env_ids] = obs
-        self.inversion_obs = self.direction_obs
+        if type(self) is MaskedMimicBaseDirection or type(self) is MaskedMimicDirectionHumanoid:  # for direction facing
+            self.inversion_obs[env_ids] = torch.cat([self.direction_obs[env_ids], self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
         root_pos = self.get_humanoid_root_states()[..., :3]

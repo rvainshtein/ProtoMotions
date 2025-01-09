@@ -5,6 +5,7 @@ defaults:
 env:
   _target_: phys_anim.envs.masked_mimic_inversion.steering.${backbone}.MaskedMimicDirectionHumanoid
   config:
+    task_obs_size: ${env.config.steering_params.obs_size}
     steering_params:
       heading_change_steps_min: 40
       heading_change_steps_max: 150

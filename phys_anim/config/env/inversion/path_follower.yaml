@@ -8,6 +8,7 @@ env:
   config:
     enable_height_termination: False
     max_episode_length: 300
+    task_obs_size: ${env.config.path_follower_params.path_obs_size}
 
     path_follower_params:
       num_traj_samples: ${eval:${env.config.mimic_target_pose.num_future_steps}+1}
