@@ -1,7 +1,7 @@
 def main():
     output_file_path = "runs.txt"
-    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +opt=[full_run,wdb,slurm_autoresume]"
-    base_run_command += " algo.config.max_epochs=4000 seed=${seed} wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
+    base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym "
+    base_run_opt_command = " +opt=[full_run,wdb,slurm_autoresume] algo.config.max_epochs=4000 seed=${seed} wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
     experiment_arg = "+exp=inversion/{}"
     extra_args = "{}"
 
@@ -20,9 +20,9 @@ def main():
                         current_run_command = ""
                         current_run_command += base_run_command
                         current_exp = experiment_arg.format(env)
-                        experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
-                        current_run_command += (
-                            f" experiment_name={experiment_name}" + "_${seed}"
+                        experiment_name = (
+                            f" experiment_name={env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}_"
+                            + "_${seed}"
                         )
                         extra_args = f" env.config.use_chens_prior={prior_flag}"
                         extra_args += f" env.config.use_text={text_flag}"
@@ -32,7 +32,13 @@ def main():
                         if bigger_model:
                             extra_args += " algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"
                         current_run_command = " ".join(
-                            [current_run_command, current_exp, extra_args]
+                            [
+                                current_run_command,
+                                current_exp,
+                                base_run_opt_command,
+                                extra_args,
+                                experiment_name,
+                            ]
                         )
                         with open(output_file_path, "a") as f:
                             f.write(current_run_command + "\n")
