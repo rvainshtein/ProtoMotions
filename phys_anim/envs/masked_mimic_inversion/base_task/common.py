@@ -93,9 +93,10 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         raise NotImplementedError
 
     def compute_observations(self, env_ids=None):
-        obs = super().compute_observations(env_ids)
+        self.mask_everything()
+        super().compute_observations(env_ids)
+        self.mask_everything()
         self.compute_priors(env_ids)
-        return obs
 
     def compute_priors(self, env_ids):
         if self.config.get("use_chens_prior", False):

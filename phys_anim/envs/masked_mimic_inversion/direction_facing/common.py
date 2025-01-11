@@ -118,12 +118,6 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
                 30 * 1 + self.progress_buf[env_ids]
         )  # Allow 15 frames (0.5sec) to turn.
 
-    def compute_observations(self, env_ids=None):
-        self.mask_everything()
-        super().compute_observations(env_ids)
-        self.mask_everything()
-        self.compute_priors(env_ids)
-
     def create_chens_prior(self, env_ids):
         turning_envs = self.progress_buf < 0
         turned_envs = ~turning_envs
@@ -421,10 +415,9 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
 @torch.jit.script
 def compute_facing_observations(root_states, tar_face_dir, w_last: bool):
     root_rot = root_states[:, 3:7]
-    heading_rot = torch_utils.calc_heading_quat_inv(root_rot)
     tar_face_dir3d = torch.cat(
-        [tar_face_dir, torch.zeros_like(tar_face_dir[..., 0:1])], dim=-1
-    )
+        [tar_face_dir, torch.zeros_like(tar_face_dir[..., 0:1])], dim=-1)
+    heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
     local_tar_face_dir = rotations.quat_rotate(heading_rot, tar_face_dir3d, w_last)
     local_tar_face_dir = local_tar_face_dir[..., 0:2]
     return local_tar_face_dir
