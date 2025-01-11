@@ -374,11 +374,14 @@ class PPO:
             with self.fabric.no_backward_sync(self.actor, enabled=is_accumulating):
                 actor_loss, actor_loss_dict = self.actor_step(batch_idx)
                 scaled_actor_loss = actor_loss / num_accumulation_steps
-                self.fabric.backward(scaled_actor_loss)
+
+                dummy_loss = torch.randn(10, requires_grad=True).sum() * 0.
+                self.fabric.backward(dummy_loss * scaled_actor_loss)
+                # self.fabric.backward(scaled_actor_loss)
 
             if not is_accumulating:
-                actor_grad_clip_dict = self.handle_actor_grad_clipping()
-                iter_log_dict.update(actor_grad_clip_dict)
+                # actor_grad_clip_dict = self.handle_actor_grad_clipping()
+                # iter_log_dict.update(actor_grad_clip_dict)
                 self.actor_optimizer.step()
                 self.actor_optimizer.zero_grad()
                 self.actor.logstd_tick(self.current_epoch)

@@ -19,6 +19,11 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
         config.visualize_markers = False
         super().__init__(config=config, device=device, motion_lib=motion_lib)
 
+        if "smpl" in self.config.robot.asset.asset_file_name:
+            self.head_body_id = self.head_id = self.build_body_ids_tensor(["Head"]).item()
+        else:
+            self.head_body_id = self.head_id = self.build_body_ids_tensor(["head"]).item()
+
     ###############################################################
     # Set up IsaacGym environment
     ###############################################################

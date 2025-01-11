@@ -2,7 +2,8 @@ import os
 
 
 def main():
-    DEBUG = True
+    # DEBUG = True
+    DEBUG = False
     output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
     if os.path.exists(output_file_path):
         os.remove(output_file_path)

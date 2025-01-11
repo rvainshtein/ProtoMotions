@@ -169,6 +169,7 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
         self._prev_root_pos[:] = self.get_humanoid_root_states()[..., 0:3]
 
     def compute_task_obs(self, env_ids=None):
+        super().compute_task_obs(env_ids)
         if (env_ids is None):
             root_states = self.get_humanoid_root_states()
             tar_states = self._target_states
