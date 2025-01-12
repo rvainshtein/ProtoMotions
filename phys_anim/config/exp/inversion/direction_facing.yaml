@@ -4,4 +4,4 @@ defaults:
   - /exp/inversion/base
   - /opt/masked_mimic/inversion/direction_facing
 
-experiment_name: inversion_direction_facing
+experiment_name: direction_facing

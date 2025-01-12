@@ -4,6 +4,8 @@ defaults:
   - /exp/inversion/base
   - /opt/masked_mimic/inversion/steering
 
+experiment_name: direction
+
 wandb:
   wandb_group: inversion_steering
   wandb_tags: [ inversion, steering ]

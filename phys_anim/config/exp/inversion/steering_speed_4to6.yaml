@@ -9,7 +9,7 @@ env:
       tar_speed_min: 4
       tar_speed_max: 6
 
-experiment_name: inversion_steering_speed_4to6
+experiment_name: direction_speed_4to6
 
 wandb:
   wandb_tags: [ inversion, steering, speed_4to6 ]

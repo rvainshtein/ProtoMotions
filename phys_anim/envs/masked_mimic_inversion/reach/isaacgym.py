@@ -35,7 +35,7 @@ import numpy as np
 from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
     MaskedMimicTaskHumanoid,
 )
-from phys_anim.envs.masked_mimic.tasks.reach.common import BaseMaskedMimicReach
+from phys_anim.envs.masked_mimic_inversion.reach.common import BaseMaskedMimicReach
 
 
 class MaskedMimicReachHumanoid(BaseMaskedMimicReach, MaskedMimicTaskHumanoid):

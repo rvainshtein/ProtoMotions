@@ -4,6 +4,8 @@ defaults:
   - /exp/inversion/base
   - /opt/masked_mimic/inversion/reach
 
+experiment_name: reach
+
 wandb:
   wandb_group: inversion_reach
   wandb_tags: [ inversion, reach ]
