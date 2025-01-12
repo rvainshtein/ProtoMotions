@@ -45,10 +45,15 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
 
     @torch.no_grad()
     def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
-        # self.eval()
-        # log_dict, success_rate = self.env.calc_eval_metrics()  # TODO: Implement this in the env
-        # return log_dict, success_rate
-        return {}, None
+        self.eval()
+        results = getattr(self.env,'results')
+        if len(results) > 0:
+            log_dict = results
+            success_rate = results["reach_success"]
+        else:
+            log_dict = {}
+            success_rate = None
+        return log_dict, success_rate
 
 
 def print_param_summary(model: Union[torch.nn.Module, _FabricModule]) -> None:

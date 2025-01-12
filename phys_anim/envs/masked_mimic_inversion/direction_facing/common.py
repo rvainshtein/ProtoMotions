@@ -5,6 +5,7 @@ from isaac_utils.rotations import quat_rotate
 from isaac_utils.torch_utils import calc_heading_quat
 from typing import TYPE_CHECKING, Dict, Tuple
 
+from phys_anim.envs.humanoid.humanoid_utils import quat_diff_norm
 from torch import Tensor
 
 from phys_anim.envs.masked_mimic_inversion.steering.common import compute_heading_reward
@@ -81,20 +82,61 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
                 f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}'
             )
 
-        other_log_terms = {
-            "total_rew": self.rew_buf,
-        }
-        other_log_terms = {**other_log_terms, **output_dict}
+        self.log_dict.update(output_dict)
+        # need these at the end of every compute_reward function
+        self.compute_failures_and_distances()
+        self.accumulate_errors()
 
-        for rew_name, rew in other_log_terms.items():
-            self.log_dict[f"{rew_name}_mean"] = rew.mean()
-            # self.log_dict[f"{rew_name}_std"] = rew.std()
-
-        self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
-        self.last_other_rewards = other_log_terms
+    def compute_failures_and_distances(self):
+        current_state = self.get_bodies_state()
+        body_pos, body_rot = (
+            current_state.body_pos,
+            current_state.body_rot,
+        )
+        root_vel = self._prev_root_pos[:, :2] - body_pos[:, 0, :2]
+        tar_dir_vel = self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1) * self.dt
+        tangent_vel = root_vel - tar_dir_vel
+        tangent_vel_error = torch.norm(tangent_vel, dim=-1)
+        turning_envs = self._heading_turn_steps > self.progress_buf
+        turned_envs = ~turning_envs
+        # Turn 3d rotation to flat heading quaternion
+        facing_quat = torch_utils.calc_heading_quat(body_rot[:, 0], w_last=self.w_last)
+        # Turn 2 vector to quaternion
+        angle = rotations.vec_to_heading(self._tar_facing_dir)
+        neg = angle < 0
+        angle[neg] += 2 * torch.pi
+        tar_facing_quat = rotations.heading_to_quat(angle, w_last=self.w_last)
+        # Compute angle error
+        facing_err = quat_diff_norm(facing_quat, tar_facing_quat, self.w_last)
+        facing_err_degrees = facing_err * 180 / torch.pi
+        self._current_accumulated_errors[turned_envs] += tangent_vel_error[turned_envs]
+        self._current_failures[turned_envs] += (
+                                                       45 < facing_err_degrees[turned_envs]
+                                               ) | (facing_err_degrees[turned_envs] < -45)
+        self._current_failures[turning_envs] = 0
+        self._current_accumulated_errors[turning_envs] = 0
+        self._last_length[:] = self.progress_buf[:]
 
     def reset_heading_task(self, env_ids):
         super().reset_heading_task(env_ids)
+        if len(env_ids) > 0:
+            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
+            active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
+                (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
+            )
+            average_distances = self._current_accumulated_errors[env_ids][
+                active_envs
+            ] / (
+                self._last_length[env_ids][active_envs]
+                - self._heading_turn_steps[env_ids][active_envs]
+            )
+            self._distances.extend(average_distances.cpu().tolist())
+            self._current_accumulated_errors[env_ids] = 0
+            self._failures.extend(
+                (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
+            )
+            self._current_failures[env_ids] = 0
+
         n = len(env_ids)
         if np.random.binomial(1, self._random_heading_probability):
             face_dir_theta = 2 * torch.pi * torch.rand(n, device=self.device) - torch.pi

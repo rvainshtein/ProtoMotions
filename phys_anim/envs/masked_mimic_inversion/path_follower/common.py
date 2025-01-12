@@ -46,6 +46,19 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
     # Handle resets
     ###############################################################
     def reset_task(self, env_ids):
+        if len(env_ids) > 0:
+            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
+            active_envs = self._current_accumulated_errors[env_ids] > 0
+            average_distances = (
+                self._current_accumulated_errors[env_ids][active_envs]
+                / self._last_length[env_ids][active_envs]
+            )
+            self._distances.extend(average_distances.cpu().tolist())
+            self._current_accumulated_errors[env_ids] = 0
+            self._failures.extend(
+                (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
+            )
+            self._current_failures[env_ids] = 0
         super().reset_task(env_ids)
         self.reset_path_ids = env_ids
 
@@ -106,6 +119,40 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.rew_buf[:] = compute_path_reward(
             head_position, tar_pos, self.config.path_follower_params.height_conditioned
         )
+
+        # need these at the end of every compute_reward function
+        self.compute_failures_and_distances()
+        self.accumulate_errors()
+
+    def compute_failures_and_distances(self):
+        body_part = self.gym.find_asset_rigid_body_index(
+            self.humanoid_asset, self.condition_body_part
+        )
+        current_state = self.get_bodies_state()
+        cur_gt = current_state.body_pos
+
+        cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
+            self.num_envs, 1, 1
+        )
+
+        time = self.progress_buf * self.dt
+        env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        tar_pos = self.path_generator.calc_pos(env_ids, time).clone()
+
+        distance_to_target = torch.norm(
+            cur_gt[:, body_part, :3] - tar_pos[:, :3], dim=-1
+        ).view(self.num_envs)
+
+        warmup_passed = self.progress_buf > 10  # 10 frames
+
+        self._current_accumulated_errors[warmup_passed] += distance_to_target[
+            warmup_passed
+        ]
+        self._current_failures[warmup_passed] += distance_to_target[warmup_passed] > 2.0
+        self._last_length[warmup_passed] = self.progress_buf[warmup_passed]
+
+        self._current_accumulated_errors[~warmup_passed] = 0
+        self._current_failures[~warmup_passed] = 0
 
     def compute_reset(self):
         time = self.progress_buf * self.dt

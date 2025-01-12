@@ -180,10 +180,10 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         self._last_length[:] = self.progress_buf[:]
 
         if len(self._failures) > 0:
-            self.last_other_rewards["reach_success"] = 1.0 - sum(self._failures) / len(
+            self.results["reach_success"] = 1.0 - sum(self._failures) / len(
                 self._failures
             )
-            self.last_other_rewards["reach_distance"] = sum(self._distances) / len(
+            self.results["reach_distance"] = sum(self._distances) / len(
                 self._distances
             )
 

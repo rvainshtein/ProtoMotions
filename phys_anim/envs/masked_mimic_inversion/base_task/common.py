@@ -50,6 +50,35 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             dtype=torch.float,
         )
 
+        self._failures = []
+        self._distances = []
+        self._current_accumulated_errors = (
+                torch.zeros([self.num_envs], device=self.device, dtype=torch.float) - 1
+        )
+        self._current_failures = torch.zeros(
+            [self.num_envs], device=self.device, dtype=torch.float
+        )
+        self._last_length = torch.zeros(
+            [self.num_envs], device=self.device, dtype=torch.long
+        )
+
+        self.results = {}
+
+    def accumulate_errors(self):
+        self.last_unscaled_rewards = self.log_dict
+
+        if len(self._failures) > 0:
+            self.results["reach_success"] = 1.0 - sum(self._failures) / len(
+                self._failures
+            )
+            self.results["reach_distance"] = sum(self._distances) / len(
+                self._distances
+            )
+
+    def compute_failures_and_distances(self):
+        # need to implement this in each env
+        pass
+
     def get_current_pose_obs(self, env_ids=None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
