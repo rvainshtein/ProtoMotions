@@ -116,10 +116,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         ground_below_head = torch.min(bodies_positions, dim=1).values[..., 2]
         head_position[..., 2] -= ground_below_head.view(-1)
 
-        self.rew_buf[:] = compute_path_reward(
+        self.rew_buf[:], output_dict = compute_path_reward(
             head_position, tar_pos, self.config.path_follower_params.height_conditioned
         )
 
+        self.log_dict.update(output_dict)
         # need these at the end of every compute_reward function
         self.compute_failures_and_distances()
         self.accumulate_errors()
@@ -645,8 +646,8 @@ def compute_path_reward(head_pos, tar_pos, height_conditioned):
         reward = (pos_reward + height_reward) * 0.5
     else:
         reward = pos_reward
-
-    return reward
+    output_dict = dict(pos_reward=pos_reward, height_reward=height_reward)
+    return reward, output_dict
 
 
 @torch.jit.script

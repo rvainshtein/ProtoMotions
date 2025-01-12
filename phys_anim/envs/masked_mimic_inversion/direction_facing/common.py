@@ -150,15 +150,12 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
                                      dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
                              ) % (2 * np.pi) - np.pi
 
-        face_tar_dir = torch.stack(
-            [torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1
+        face_tar_dir = torch.stack([torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1
         )
         self._tar_facing_dir[env_ids] = face_tar_dir
         self._tar_facing_dir_theta[env_ids] = face_dir_theta
 
-        self._heading_turn_steps[env_ids] = (
-                30 * 1 + self.progress_buf[env_ids]
-        )  # Allow 15 frames (0.5sec) to turn.
+        self._heading_turn_steps[env_ids] = (30 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
 
     def create_chens_prior(self, env_ids):
         turning_envs = self.progress_buf < 0
