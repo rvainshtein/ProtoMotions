@@ -881,7 +881,7 @@ class PPO:
             "rewards/total_rewards": self.experience_buffer.total_rewards.mean().item(),
         }
 
-        env_log_dict = self.episode_env_tensors.mean_and_clear()
+        env_log_dict = self.episode_env_tensors.compute_and_clear()
         env_log_dict = {f"env/{k}": v for k, v in env_log_dict.items()}
         if len(env_log_dict) > 0:
             log_dict.update(env_log_dict)

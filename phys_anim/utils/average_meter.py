@@ -78,6 +78,15 @@ class TensorAverageMeter:
         else:
             return cat.mean()
 
+    def std(self):
+        if len(self.tensors) == 0:
+            return 0
+        cat = torch.cat(self.tensors, dim=0)
+        if cat.numel() == 0:
+            return 0
+        else:
+            return cat.std()
+
     def clear(self):
         self.tensors = []
 
@@ -99,14 +108,15 @@ class TensorAverageMeterDict:
                 self.data[k] = TensorAverageMeter()
             self.data[k].add(v)
 
-    def mean(self):
-        mean_dict = {k: v.mean() for k, v in self.data.items()}
-        return mean_dict
+    def compute(self):
+        mean_dict = {k + '_mean': v.mean() for k, v in self.data.items()}
+        std_dict = {k + '_std': v.std() for k, v in self.data.items()}
+        return {**mean_dict, **std_dict}
 
     def clear(self):
         self.data = {}
 
-    def mean_and_clear(self):
-        mean = self.mean()
+    def compute_and_clear(self):
+        output = self.compute()
         self.clear()
-        return mean
+        return output
