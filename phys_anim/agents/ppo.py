@@ -375,13 +375,11 @@ class PPO:
                 actor_loss, actor_loss_dict = self.actor_step(batch_idx)
                 scaled_actor_loss = actor_loss / num_accumulation_steps
 
-                dummy_loss = torch.randn(10, requires_grad=True).sum() * 0.
-                self.fabric.backward(dummy_loss * scaled_actor_loss)
-                # self.fabric.backward(scaled_actor_loss)
+                self.fabric.backward(scaled_actor_loss)
 
             if not is_accumulating:
-                # actor_grad_clip_dict = self.handle_actor_grad_clipping()
-                # iter_log_dict.update(actor_grad_clip_dict)
+                actor_grad_clip_dict = self.handle_actor_grad_clipping()
+                iter_log_dict.update(actor_grad_clip_dict)
                 self.actor_optimizer.step()
                 self.actor_optimizer.zero_grad()
                 self.actor.logstd_tick(self.current_epoch)
@@ -732,7 +730,7 @@ class PPO:
 
         if self.fabric.global_rank == 0:
             if root_dir != save_dir:
-                if (root_dir / "last.ckpt").is_symlink():
+                if (root_dir / "last.ckpt").exists():
                     (root_dir / "last.ckpt").unlink()
                 # Make root_dir / "last.ckpt" point to the new checkpoint
                 (root_dir / "last.ckpt").symlink_to(save_dir / name)
