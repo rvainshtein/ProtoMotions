@@ -63,6 +63,15 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
     ###############################################################
     # Handle resets
     ###############################################################
+    def compute_task_obs(self, env_ids=None):
+        super().compute_task_obs(env_ids)
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device)
+        root_states = self.get_humanoid_root_states()[env_ids]
+        tar_pos = self._tar_pos[env_ids]
+        reach_obs = compute_location_observations(root_states, tar_pos, self.w_last)
+        self.inversion_obs[env_ids] = torch.cat([reach_obs, self.current_pose_obs[env_ids]], dim=-1)
+
     def reset_task(self, env_ids):
         if len(env_ids) > 0:
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
