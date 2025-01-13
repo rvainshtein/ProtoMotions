@@ -25,32 +25,30 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+from typing import Optional, Tuple
 
-import torch
-
+from isaac_utils import torch_utils
+from isaac_utils.rotations import quat_mul
 from isaacgym import gymapi, gymtorch
-from isaacgym.torch_utils import *
-
-import env.tasks.humanoid_amp as humanoid_amp
-import env.tasks.humanoid_amp_task as humanoid_amp_task
-from utils import torch_utils
+from isaac_utils.torch_utils import *
+from torch import Tensor
 
 from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
     MaskedMimicTaskHumanoid,
 )
 
 
-class HumanoidStrike(MaskedMimicTaskHumanoid):
+class MaskedMimicStrike(MaskedMimicTaskHumanoid):
     def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
         super().__init__(config=config, device=device)
 
         if not self.headless:
             self._build_marker_state_tensors()
 
-        self.tar_dist_min = self.config.strike_params.tar_dist_min
-        self.tar_dist_max = self.config.strike_params.tar_dist_max
-        self.near_dist = self.config.strike_params.near_dist
-        self.near_prob = self.config.strike_params.near_prob
+        self._tar_dist_min = self.config.strike_params.tar_dist_min
+        self._tar_dist_max = self.config.strike_params.tar_dist_max
+        self._near_dist = self.config.strike_params.near_dist
+        self._near_prob = self.config.strike_params.near_prob
 
         self._prev_root_pos = torch.zeros([self.num_envs, 3], device=self.device, dtype=torch.float)
 
@@ -59,12 +57,6 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
                                                                    self.humanoid_handles[0],
                                                                    strike_body_names)
         self._build_target_tensors()
-
-    def get_task_obs_size(self):
-        obs_size = 0
-        if (self._enable_task_obs):
-            obs_size = 15
-        return obs_size
 
     def create_envs(self, num_envs, spacing, num_per_row):
         self._target_handles = []
@@ -102,8 +94,6 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
         self._target_handles.append(target_handle)
 
     def _build_strike_body_ids_tensor(self, env_ptr, actor_handle, body_names):
-        env_ptr = self.envs[0]
-        actor_handle = self.humanoid_handles[0]
         body_ids = []
 
         for body_name in body_names:
@@ -116,11 +106,11 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
 
     def _build_target_tensors(self):
         num_actors = self.get_num_actors_per_env()
-        self._target_states = self._root_states.view(self.num_envs, num_actors, self._root_states.shape[-1])[..., 1, :]
+        self._target_states = self.root_states.view(self.num_envs, num_actors, self.root_states.shape[-1])[..., 1, :]
 
         self._tar_actor_ids = to_torch(num_actors * np.arange(self.num_envs), device=self.device, dtype=torch.int32) + 1
 
-        bodies_per_env = self._rigid_body_state.shape[0] // self.num_envs
+        bodies_per_env = self.rigid_body_state.shape[0] // self.num_envs
         contact_force_tensor = self.gym.acquire_net_contact_force_tensor(self.sim)
         contact_force_tensor = gymtorch.wrap_tensor(contact_force_tensor)
         self._tar_contact_forces = contact_force_tensor.view(self.num_envs, bodies_per_env, 3)[..., self.num_bodies, :]
@@ -131,7 +121,11 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
         super().reset_actors(env_ids)
         self._reset_target(env_ids)
 
-    def _reset_target(self, env_ids):
+    def _reset_target(self, env_ids=None):
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        root_states = self.get_humanoid_root_states()[env_ids]
+
         n = len(env_ids)
 
         init_near = torch.rand([n], dtype=self._target_states.dtype,
@@ -143,13 +137,13 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
                                                                  device=self._target_states.device) + self._tar_dist_min
 
         rand_theta = 2 * np.pi * torch.rand([n], dtype=self._target_states.dtype, device=self._target_states.device)
-        self._target_states[env_ids, 0] = rand_dist * torch.cos(rand_theta) + self._humanoid_root_states[env_ids, 0]
-        self._target_states[env_ids, 1] = rand_dist * torch.sin(rand_theta) + self._humanoid_root_states[env_ids, 1]
+        self._target_states[env_ids, 0] = rand_dist * torch.cos(rand_theta) + root_states[env_ids, 0]
+        self._target_states[env_ids, 1] = rand_dist * torch.sin(rand_theta) + root_states[env_ids, 1]
         self._target_states[env_ids, 2] = 0.9
 
         rand_rot_theta = 2 * np.pi * torch.rand([n], dtype=self._target_states.dtype, device=self._target_states.device)
         axis = torch.tensor([0.0, 0.0, 1.0], dtype=self._target_states.dtype, device=self._target_states.device)
-        rand_rot = quat_from_angle_axis(rand_rot_theta, axis)
+        rand_rot = quat_from_angle_axis(rand_rot_theta, axis, w_last=self.w_last)
 
         self._target_states[env_ids, 3:7] = rand_rot
         self._target_states[env_ids, 7:10] = 0.0
@@ -160,7 +154,7 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
 
         env_ids_int32 = self._tar_actor_ids[env_ids]
         self.gym.set_actor_root_state_tensor_indexed(self.sim,
-                                                     gymtorch.unwrap_tensor(self._root_states),
+                                                     gymtorch.unwrap_tensor(self.root_states),
                                                      gymtorch.unwrap_tensor(env_ids_int32),
                                                      len(env_ids_int32))
 
@@ -171,11 +165,10 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
         if (env_ids is None):
-            root_states = self.get_humanoid_root_states()
-            tar_states = self._target_states
-        else:
-            root_states = self.get_humanoid_root_states()[env_ids]
-            tar_states = self._target_states[env_ids]
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+
+        root_states = self.get_humanoid_root_states()[env_ids]
+        tar_states = self._target_states[env_ids]
 
         obs = compute_strike_observations(root_states, tar_states)
         return obs
@@ -183,30 +176,37 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
     def compute_reward(self, actions):
         tar_pos = self._target_states[..., 0:3]
         tar_rot = self._target_states[..., 3:7]
-        char_root_state = self._humanoid_root_states
-        strike_body_vel = self._rigid_body_vel[..., self._strike_body_ids[0], :]
+        char_root_state = self.humanoid_root_states
+        strike_body_vel = self.rigid_body_vel[..., self._strike_body_ids[0], :]
 
         self.rew_buf[:] = compute_strike_reward(tar_pos, tar_rot, char_root_state,
-                                                self._prev_root_pos, strike_body_vel,
-                                                self.dt, self._near_dist)
+                                                self._prev_root_pos, self.dt, self.w_last)
 
     def compute_reset(self):
-        self.reset_buf[:], self._terminate_buf[:] = compute_humanoid_reset(self.reset_buf, self.progress_buf,
-                                                                           self._contact_forces, self._contact_body_ids,
-                                                                           self._rigid_body_pos,
-                                                                           self._tar_contact_forces,
-                                                                           self._strike_body_ids,
-                                                                           self.max_episode_length,
-                                                                           self._enable_early_termination,
-                                                                           self._termination_heights)
-        return
+        bodies_positions = self.get_body_positions()
+
+        bodies_positions[..., 2] -= (
+            torch.min(bodies_positions, dim=1).values[:, 2].view(-1, 1)
+        )
+
+        termination_heights = self.termination_heights + self.get_ground_heights(
+            bodies_positions[:, self.head_body_id, :2])
+        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(self.reset_buf, self.progress_buf,
+                                                                          self.contact_forces, self.contact_body_ids,
+                                                                          self.rigid_body_pos,
+                                                                          self._tar_contact_forces,
+                                                                          self._strike_body_ids,
+                                                                          self.config.max_episode_length,
+                                                                          self.config.enable_height_termination,
+                                                                          termination_heights)
+
 
     def draw_task(self):
         cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
 
         self.gym.clear_lines(self.viewer)
 
-        starts = self._humanoid_root_states[..., 0:3]
+        starts = self.humanoid_root_states[..., 0:3]
         ends = self._target_states[..., 0:3]
         verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
 
@@ -221,8 +221,8 @@ class HumanoidStrike(MaskedMimicTaskHumanoid):
 #####################################################################
 
 @torch.jit.script
-def compute_strike_observations(root_states, tar_states):
-    # type: (Tensor, Tensor) -> Tensor
+def compute_strike_observations(root_states, tar_states, w_last=True):
+    # type: (Tensor, Tensor, bool) -> Tensor
     root_pos = root_states[:, 0:3]
     root_rot = root_states[:, 3:7]
 
@@ -231,24 +231,24 @@ def compute_strike_observations(root_states, tar_states):
     tar_vel = tar_states[:, 7:10]
     tar_ang_vel = tar_states[:, 10:13]
 
-    heading_rot = torch_utils.calc_heading_quat_inv(root_rot)
+    heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last=w_last)
 
     local_tar_pos = tar_pos - root_pos
     local_tar_pos[..., -1] = tar_pos[..., -1]
-    local_tar_pos = quat_rotate(heading_rot, local_tar_pos)
-    local_tar_vel = quat_rotate(heading_rot, tar_vel)
-    local_tar_ang_vel = quat_rotate(heading_rot, tar_ang_vel)
+    local_tar_pos = quat_rotate(heading_rot, local_tar_pos, w_last=w_last)
+    local_tar_vel = quat_rotate(heading_rot, tar_vel, w_last=w_last)
+    local_tar_ang_vel = quat_rotate(heading_rot, tar_ang_vel, w_last=w_last)
 
-    local_tar_rot = quat_mul(heading_rot, tar_rot)
-    local_tar_rot_obs = torch_utils.quat_to_tan_norm(local_tar_rot)
+    local_tar_rot = quat_mul(heading_rot, tar_rot, w_last=w_last)
+    local_tar_rot_obs = torch_utils.quat_to_tan_norm(local_tar_rot, w_last=w_last)
 
     obs = torch.cat([local_tar_pos, local_tar_rot_obs, local_tar_vel, local_tar_ang_vel], dim=-1)
     return obs
 
 
 @torch.jit.script
-def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, strike_body_vel, dt, near_dist):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, float) -> Tensor
+def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_last=True):
+    # type: (Tensor, Tensor, Tensor, Tensor, float, bool) -> Tensor
     tar_speed = 1.0
     vel_err_scale = 4.0
 
@@ -257,7 +257,7 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, strike_bo
 
     up = torch.zeros_like(tar_pos)
     up[..., -1] = 1
-    tar_up = quat_rotate(tar_rot, up)
+    tar_up = quat_rotate(tar_rot, up, w_last=w_last)
     tar_rot_err = torch.sum(up * tar_up, dim=-1)
     tar_rot_r = torch.clamp_min(1.0 - tar_rot_err, 0.0)
 
