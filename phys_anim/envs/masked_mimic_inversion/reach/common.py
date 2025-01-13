@@ -70,7 +70,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         root_states = self.get_humanoid_root_states()[env_ids]
         tar_pos = self._tar_pos[env_ids]
         reach_obs = compute_location_observations(root_states, tar_pos, self.w_last)
-        self.inversion_obs[env_ids] = torch.cat([reach_obs, self.current_pose_obs[env_ids]], dim=-1)
+        self.inversion_obs[env_ids] = torch.cat([reach_obs, self.current_pose_obs], dim=-1)
 
     def reset_task(self, env_ids):
         if len(env_ids) > 0:
@@ -419,7 +419,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
 def compute_location_observations(root_states, tar_pos, w_last=True):
     # type: (Tensor, Tensor, bool) -> Tensor
     root_rot = root_states[:, 3:7]
-    heading_rot = torch_utils.calc_heading_quat_inv(root_rot)
+    heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
     local_tar_pos = rotations.quat_rotate(heading_rot, tar_pos, w_last)
 
     obs = local_tar_pos
