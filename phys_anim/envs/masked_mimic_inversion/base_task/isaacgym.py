@@ -69,4 +69,6 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
         super().render()
 
         if self.viewer:
+            # print reward
+            print(f"Reward: {self.rew_buf.item():.2f}")
             self.draw_task()

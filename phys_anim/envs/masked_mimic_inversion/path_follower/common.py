@@ -92,7 +92,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
             self.reset_path_ids = None
 
-        traj_samples = self.fetch_path_samples(env_ids)
+        traj_samples = self.fetch_path_samples(env_ids, time_offset=0)[0]
 
         flat_head_position = head_position.view(-1, 3)
         flat_head_position[..., 2] -= ground_below_head.view(-1)
@@ -215,7 +215,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             )
 
             self.reset_path_ids = None
-        traj_samples, traj_samples_p1 = self.fetch_path_samples_chen(env_ids)
+        traj_samples, traj_samples_p1 = self.fetch_path_samples(env_ids)
         dir_p_to_p_1 = traj_samples_p1[..., :2] - traj_samples[..., :2]
         dir_p_to_p_1_flat = dir_p_to_p_1.view(-1, 2)
         angle = rotations.vec_to_heading(dir_p_to_p_1_flat).view(
@@ -287,35 +287,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             self.config.path_follower_params.path_generator.height_conditioned,
         )
 
-    def fetch_path_samples(self, env_ids=None):
-        # 5 seconds with 0.5 second intervals, 10 samples.
-        if env_ids is None:
-            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
-
-        timestep_beg = self.progress_buf[env_ids] * self.dt
-        timesteps = torch.arange(
-            self._num_traj_samples, device=self.device, dtype=torch.float
-        )
-        timesteps = timesteps * self._traj_sample_timestep
-        traj_timesteps = timestep_beg.unsqueeze(-1) + timesteps
-
-        env_ids_tiled = torch.broadcast_to(env_ids.unsqueeze(-1), traj_timesteps.shape)
-
-        traj_samples_flat = self.path_generator.calc_pos(
-            env_ids_tiled.flatten(), traj_timesteps.flatten()
-        )
-        traj_samples = torch.reshape(
-            traj_samples_flat,
-            shape=(
-                env_ids.shape[0],
-                self._num_traj_samples,
-                traj_samples_flat.shape[-1],
-            ),
-        )
-
-        return traj_samples
-
-    def fetch_path_samples_chen(self, env_ids=None, time_offset=10):
+    def fetch_path_samples(self, env_ids=None, time_offset=10):
         # 5 seconds with 0.5 second intervals, 10 samples.
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)

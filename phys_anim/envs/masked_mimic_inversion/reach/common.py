@@ -150,7 +150,6 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
     ###############################################################
     def compute_reward(self, actions):
         reach_body_pos = self.rigid_body_pos[:, self.reach_body_id, :]
-        root_rot = self.humanoid_root_states[..., 3:7]
         self.rew_buf[:] = compute_reach_reward(reach_body_pos, self._tar_pos)
 
         # self.log_dict.update(output_dict)
