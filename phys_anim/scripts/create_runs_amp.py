@@ -31,7 +31,7 @@ def main():
             current_extra_args = extra_args.copy()
             current_run_command = ""
             current_run_command += base_run_command
-            current_run_command += f' +exp=inversion/{env}'
+            current_run_command += f' +exp=amp_inversion/{env}'
             current_experiment_name = f"{env}_disable_discriminator_{disable_discriminator}"
 
             if DEBUG:
