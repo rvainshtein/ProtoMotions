@@ -1,0 +1,51 @@
+# @package _global_
+
+defaults:
+  - /env: direction_facing
+  - /exp/amp_inversion/base
+
+env:
+  config:
+    max_episode_length: 1000
+
+experiment_name: steering_amp_inversion
+
+algo:
+  config:
+    models:
+      steering_model:
+        _target_: phys_anim.agents.models.common.Flatten
+        config:
+          normalize_obs: False
+          obs_clamp_value: ${algo.config.obs_clamp_value}
+        # Input and output size are the same due to flattening
+        num_in: ${env.config.steering_params.obs_size}
+        num_out: ${.num_in}
+
+    # Append the direction obs to the actor and critic inputs
+    actor:
+      config:
+        mu_model:
+          config:
+            extra_inputs:
+              steering: ${algo.config.models.steering_model}
+
+    critic:
+      config:
+        extra_inputs:
+          steering: ${algo.config.models.steering_model}
+
+    extra_inputs:
+      steering:
+        retrieve_from_env: True
+        dtype: float
+        size: ${algo.config.models.steering_model.num_in}
+        env_obs_name: steering_obs
+
+wandb:
+  wandb_group: amp_direction_facing
+  wandb_tags: [ amp, direction_facing ]
+
+
+
+
