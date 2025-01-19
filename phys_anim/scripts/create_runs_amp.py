@@ -21,7 +21,7 @@ def main():
 
     # envs = ["direction_facing"]
     # envs = ["path_follower"]
-    envs = ["path_follower", "direction_facing", "steering"]
+    envs = ["path_follower", "steering"]
     use_disable_discriminator = [True, False]
 
     # create runs for each combination of hyperparameters
