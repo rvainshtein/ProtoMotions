@@ -60,6 +60,8 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
     def create_envs(self, num_envs, spacing, num_per_row):
         self._target_handles = []
+        self._marker_handles = [[] for _ in range(num_envs)]
+
         self._load_target_asset()
 
         super().create_envs(num_envs, spacing, num_per_row)
