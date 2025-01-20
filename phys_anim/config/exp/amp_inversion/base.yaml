@@ -5,6 +5,11 @@ defaults:
   - /terrain/terrain_obs
   - /terrain/complex
   - /scenes/samp
+  - /opt/save_best_reward_model
+  - /opt/single_gpu
+
+motion_file: phys_anim/data/motions/smpl_humanoid_walk.npy
+scene_lib: null
 
 env:
   config:
