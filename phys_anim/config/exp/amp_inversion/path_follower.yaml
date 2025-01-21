@@ -1,0 +1,51 @@
+# @package _global_
+
+defaults:
+  - /env: path_follower
+  - /exp/amp_inversion/base
+
+env:
+  config:
+    max_episode_length: 300
+
+experiment_name: path_following_amp_inversion
+
+algo:
+  config:
+    models:
+      path_model:
+        _target_: phys_anim.agents.models.common.Flatten
+        config:
+          normalize_obs: False
+          obs_clamp_value: ${algo.config.obs_clamp_value}
+        # Input and output size are the same due to flattening
+        num_in: ${env.config.path_follower_params.path_obs_size}
+        num_out: ${.num_in}
+
+    # Append the direction obs to the actor and critic inputs
+    actor:
+      config:
+        mu_model:
+          config:
+            extra_inputs:
+              steering: ${algo.config.models.path_model}
+
+    critic:
+      config:
+        extra_inputs:
+          steering: ${algo.config.models.path_model}
+
+    extra_inputs:
+      steering:
+        retrieve_from_env: True
+        dtype: float
+        size: ${algo.config.models.path_model.num_in}
+        env_obs_name: path_obs
+
+wandb:
+  wandb_group: amp_path_following
+  wandb_tags: [ amp, path_following ]
+
+
+
+
