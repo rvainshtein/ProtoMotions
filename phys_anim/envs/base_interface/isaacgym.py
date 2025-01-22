@@ -94,6 +94,12 @@ class GymBaseInterface(BaseInterface, Humanoid):  # type: ignore[misc]
             self.gym.subscribe_viewer_keyboard_event(
                 self.viewer, gymapi.KEY_SEMICOLON, "cancel_video_record"
             )
+            self.gym.subscribe_viewer_keyboard_event(
+                self.viewer, gymapi.KEY_R, "reset_env"
+            )
+            self.gym.subscribe_viewer_keyboard_event(
+                self.viewer, gymapi.KEY_T, "reset_task"
+            )
 
             # set the camera position based on up axis
             sim_params = self.gym.get_sim_params(self.sim)
@@ -182,6 +188,11 @@ class GymBaseInterface(BaseInterface, Humanoid):  # type: ignore[misc]
                     self.user_is_recording = False
                     self.user_recording_state_change = False
                     delete_user_viewer_recordings = True
+                elif evt.action == "reset_env" and evt.value > 0:
+                    self.reset(torch.arange(self.num_envs, device=self.device))
+                elif evt.action == "reset_task" and evt.value > 0:
+                    self.reset_task(torch.arange(self.num_envs, device=self.device))
+
 
             # fetch results
             if self.device.type != "cpu":
