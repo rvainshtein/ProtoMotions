@@ -95,7 +95,7 @@ class MaskedMimicPathFollowingHumanoid(BaseMaskedMimicPathFollowing, MaskedMimic
     # Helpers
     ###############################################################
     def _update_marker(self):
-        traj_samples = self.fetch_path_samples().clone()
+        traj_samples = self.fetch_path_samples(time_offset=0)[0].clone()
         self._marker_pos[:] = traj_samples
         if not self.config.path_follower_params.path_generator.height_conditioned:
             self._marker_pos[..., 2] = 0.8  # CT hack
