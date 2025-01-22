@@ -353,8 +353,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             ref_state.rb_vel,
         )
 
-        current_state = self.get_bodies_state()[env_ids]
-        cur_gt, cur_gr = current_state.body_pos, current_state.body_rot
+        current_state = self.get_bodies_state()
+        cur_gt, cur_gr = current_state.body_pos[env_ids], current_state.body_rot[env_ids]
         # First remove the height based on the current terrain, then remove the offset to get back to the ground-truth data position
         cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
             num_envs, 1, 1
