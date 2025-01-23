@@ -12,10 +12,15 @@ def main():
     max_epochs = 20 if DEBUG else 4000
     base_run_command += " seed=${seed}" if not DEBUG else ""
     if not DEBUG:
-        extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
+        extra_args += [
+            "wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"
+        ]
 
     if DEBUG:
-        opts = ["small_run", "wdb", ]
+        opts = [
+            "small_run",
+            "wdb",
+        ]
     else:
         opts = ["full_run", "wdb", "slurm_autoresume"]
 
@@ -31,22 +36,33 @@ def main():
             current_extra_args = extra_args.copy()
             current_run_command = ""
             current_run_command += base_run_command
-            current_run_command += f' +exp=amp_inversion/{env}'
-            current_experiment_name = f"{env}_disable_discriminator_{disable_discriminator}"
+            current_run_command += f" +exp=amp_inversion/{env}"
+            current_experiment_name = (
+                f"{env}_disable_discriminator_{disable_discriminator}"
+            )
 
             if DEBUG:
-                current_experiment_name += '_DEBUG'
+                current_experiment_name += "_DEBUG"
                 current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
             current_run_command += (
-                    f" experiment_name={current_experiment_name}" + "_${seed}"
+                f" experiment_name={current_experiment_name}" + "_${seed}"
             )
             if disable_discriminator:
-                current_opts += ["disable_discriminator", "disable_discriminator_weights"]
+                current_opts += [
+                    "disable_discriminator",
+                    "disable_discriminator_weights",
+                ]
+            else:
+                current_opts += ["enable_discriminator_weights"]
 
-            opt_string = "+opt=[" + ','.join(current_opts) + "]"
-            extra_args_string = ' '.join(current_extra_args)
+            opt_string = "+opt=[" + ",".join(current_opts) + "]"
+            extra_args_string = " ".join(current_extra_args)
             current_run_command = " ".join(
-                [current_run_command, opt_string, extra_args_string, ]
+                [
+                    current_run_command,
+                    opt_string,
+                    extra_args_string,
+                ]
             )
 
             with open(output_file_path, "a") as f:
