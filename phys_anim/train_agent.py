@@ -125,10 +125,10 @@ def main(config: OmegaConf):
                     logger.config = resolved_config  # Log Hydra configuration
                     logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
 
-            # saving config with wandb id for next resumed run
-            wandb_id = wandb.run.id
-            log.info(f"wandb_id found {wandb_id}")
-            unresolved_conf["wandb"]["wandb_id"] = wandb_id
+                    # saving config with wandb id for next resumed run
+                    wandb_id = wandb.run.id
+                    log.info(f"wandb_id found {wandb_id}")
+                    unresolved_conf["wandb"]["wandb_id"] = wandb_id
 
         # only save before 1st run.
         # note, we save unresolved config for easier inference time logic
