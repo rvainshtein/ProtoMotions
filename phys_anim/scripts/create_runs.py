@@ -11,6 +11,7 @@ def main():
     extra_args = []
     max_epochs = 20 if DEBUG else 4000
     base_run_command += " seed=${seed}" if not DEBUG else ""
+    base_run_command += " +auto_load_latest=True" if not DEBUG else ""
     if not DEBUG:
         extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
 

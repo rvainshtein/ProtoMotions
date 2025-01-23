@@ -26,12 +26,12 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import hydra
+import logging
 import os
 import sys
-from pathlib import Path
-import logging
-import hydra
 from hydra.utils import instantiate
+from pathlib import Path
 
 has_robot_arg = False
 backbone = None
@@ -80,15 +80,16 @@ def main(config: OmegaConf):
     save_dir = Path(config.save_dir)
     pre_existing_checkpoint = save_dir / "last.ckpt"
     checkpoint_config_path = save_dir / "config.yaml"
-    if pre_existing_checkpoint.exists():
-        log.info(f"Found latest checkpoint at {pre_existing_checkpoint}")
-        # Load config from checkpoint folder
-        if checkpoint_config_path.exists():
-            log.info(f"Loading config from {checkpoint_config_path}")
-            config = OmegaConf.load(checkpoint_config_path)
+    if config.get('auto_load_latest', False):
+        if pre_existing_checkpoint.exists():
+            log.info(f"Found latest checkpoint at {pre_existing_checkpoint}")
+            # Load config from checkpoint folder
+            if checkpoint_config_path.exists():
+                log.info(f"Loading config from {checkpoint_config_path}")
+                config = OmegaConf.load(checkpoint_config_path)
 
-        # Set the checkpoint path in the config
-        config.checkpoint = pre_existing_checkpoint
+            # Set the checkpoint path in the config
+            config.checkpoint = pre_existing_checkpoint
 
     # Fabric should launch AFTER loading the config. This ensures that wandb parameters are loaded correctly for proper experiment resuming.
     fabric: Fabric = instantiate(config.fabric)
@@ -116,10 +117,12 @@ def main(config: OmegaConf):
 
     # find out wandb id and save to config.yaml if 1st run:
     # wandb on rank 0
+    resolved_config = OmegaConf.to_container(config, resolve=True)
     if fabric.global_rank == 0 and not checkpoint_config_path.exists():
         if "wandb" in config:
             for logger in fabric.loggers:
                 if isinstance(logger, WandbLogger):
+                    logger.config = resolved_config  # Log Hydra configuration
                     logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
 
             # saving config with wandb id for next resumed run
