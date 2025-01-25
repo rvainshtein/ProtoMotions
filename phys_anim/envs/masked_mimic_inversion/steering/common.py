@@ -158,7 +158,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         obs = compute_heading_observations(root_states, tar_dir, tar_speed, self.w_last)
         self.direction_obs[env_ids] = obs
-        if type(self) is MaskedMimicBaseDirection or type(self) is MaskedMimicDirectionHumanoid:  # for direction facing
+        # hack because of direction facing inheritance and weird TYPE_CHECKING hack
+        if type(self) is MaskedMimicBaseDirection or 'MaskedMimicDirectionHumanoid' in str(type(self)):
             self.inversion_obs[env_ids] = torch.cat([self.direction_obs[env_ids], self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
