@@ -48,9 +48,12 @@ class PathGenerator:
             sharp_mask = torch.bernoulli(sharp_probs) == 1.0
             dtheta[sharp_mask] = dtheta_sharp[sharp_mask]
 
-            dtheta[:, 0] = np.pi * (
-                2 * torch.rand([n], device=self.device) - 1.0
-            )  # Heading
+            if self.config.get('use_forward_path_only', False):
+                dtheta[:, 0] = np.pi * torch.ones(n, device=self.device)  # straight path
+            else:
+                dtheta[:, 0] = np.pi * (
+                    2 * torch.rand([n], device=self.device) - 1.0
+                )  # Heading
 
             dspeed = 2 * torch.rand([n, num_verts - 1], device=self.device) - 1.0
             dspeed *= self.config.accel_max * self.dt
