@@ -19,6 +19,7 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
 
     def setup(self):
         super().setup()
+        self.config.freeze_actor = not getattr(self.config, "dont_freeze_actor", False)
         actor_state_dict = self.actor.state_dict()
         if self.config.pre_trained_maskedmimic_path is not None:
             pre_trained_masked_mimic_state_dict = torch.load(
@@ -38,7 +39,7 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
                                        strict=False)  # strict=False to allow loading partial state_dict
             for name, param in self.actor.named_parameters():
                 fixed_name = name.replace("_forward_module.", "")
-                if fixed_name in pre_trained_actor_state_dict:
+                if fixed_name in pre_trained_actor_state_dict and self.config.freeze_actor:
                     param.requires_grad = False
 
         print_param_summary(self.actor)
