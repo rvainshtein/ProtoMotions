@@ -183,15 +183,16 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
                 f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}'
             )
 
+
+            results_output = {
+                "Speed": f'{output_dict["tar_dir_speed"].item():.3f} / {self._tar_speed.item():.3f}',
+                "Error": f'{output_dict["tar_vel_err"].item():.3f}',
+                "Tangent Error": f'{output_dict["tangent_vel_err"].item():.3f}',
+            }
+            self.print_results(results_output)
         other_log_terms = {
             "total_rew": self.rew_buf,
         }
-        results_output = {
-            "Speed": f'{output_dict["tar_dir_speed"].item():.3f} / {self._tar_speed.item():.3f}',
-            "Error": f'{output_dict["tar_vel_err"].item():.3f}',
-            "Tangent Error": f'{output_dict["tangent_vel_err"].item():.3f}',
-        }
-        self.print_results(results_output)
 
         self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
@@ -576,8 +577,8 @@ def compute_heading_reward(
     output_dict = {
         "tar_dir_speed": tar_dir_speed,
         "tangent_speed": tangent_speed,
-        "tar_vel_err": tar_vel_err,
-        "tangent_vel_err": tangent_vel_err,
+        "tar_vel_err": tar_vel_err * tar_vel_err,
+        "tangent_vel_err": tangent_err_w * tangent_vel_err * tangent_vel_err,
         "dir_reward": dir_reward,
     }
     return dir_reward, output_dict
