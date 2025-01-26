@@ -8,7 +8,10 @@ import torch
 
 from phys_anim.utils.motion_lib import MotionLib
 
-from typing import Optional, TYPE_CHECKING
+from rich.console import Console
+from rich.table import Table
+
+from typing import Optional, TYPE_CHECKING, Dict
 
 if TYPE_CHECKING:
     from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
@@ -63,6 +66,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         )
 
         self.results = {}
+        self.console = Console()
 
     def accumulate_errors(self):
         self.last_unscaled_rewards = self.log_dict
@@ -164,6 +168,30 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     ###############################################################
     def draw_task(self):
         return
+
+    def print_results(self, results_dict: Dict[str, str]) -> None:
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("Parameter", style="dim")
+        table.add_column("Value", justify="right")
+        table.add_row("Reward", f"{self.rew_buf.item():.3f}")
+        for key, value in results_dict.items():
+            # if the value is a float, format it to 3 decimal places
+            if isinstance(value, float):
+                value = f"{value:.3f}"
+            #if the value is a tensor of shape [1], convert it to a float and format it to 3 decimal places
+            elif isinstance(value, torch.Tensor) and value.shape == (1,):
+                value = f"{value.item():.3f}"
+            # if the value is a tensor of bigger shape, convert it to a string but only values, and format them to 3 decimal places
+            elif isinstance(value, torch.Tensor):
+                # Flatten the tensor to ensure iteration works for multi-dimensional tensors
+                value = ", ".join([f"{v.item():.3f}" for v in value.flatten()])
+
+            table.add_row(key, value)
+
+        # Clear the console and print the table
+        self.console.clear()
+        self.console.print(table)
+
 
 
 def get_text_embedding(

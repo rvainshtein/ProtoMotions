@@ -173,7 +173,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         if (
                 self.config.num_envs == 1
-                and self.config.steering_params.log_speed
+                and self.config.get("log_output", False)
                 and self.progress_buf % 3 == 0
         ):
             print(
@@ -186,10 +186,17 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         other_log_terms = {
             "total_rew": self.rew_buf,
         }
+            results_output = {
+                "Speed": f'{output_dict["tar_dir_speed"].item():.3f} / {self._tar_speed.item():.3f}',
+                "Error": f'{output_dict["tar_vel_err"].item():.3f}',
+                "Tangent Error": f'{output_dict["tangent_vel_err"].item():.3f}',
+            }
+            self.print_results(results_output)
 
-        for rew_name, rew in other_log_terms.items():
-            self.log_dict[f"{rew_name}_mean"] = rew.mean()
-            # self.log_dict[f"{rew_name}_std"] = rew.std()
+        self.log_dict.update(output_dict)
+        # # need these at the end of every compute_reward function
+        # self.compute_failures_and_distances()
+        # self.accumulate_errors()
 
         self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
         self.last_other_rewards = other_log_terms

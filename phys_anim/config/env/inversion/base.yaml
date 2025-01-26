@@ -17,3 +17,4 @@ eval_overrides:
   env:
     config:
       max_episode_length: 300
+      log_output: True

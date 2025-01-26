@@ -124,6 +124,13 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             head_position, tar_pos, self.config.path_follower_params.height_conditioned
         )
 
+        if (
+                self.config.num_envs == 1
+                and self.config.get("log_output", False)
+                and self.progress_buf % 3 == 0
+        ):
+            self.print_results(output_dict)
+
         self.log_dict.update(output_dict)
         # need these at the end of every compute_reward function
         self.compute_failures_and_distances()
@@ -625,7 +632,12 @@ def compute_path_reward(head_pos, tar_pos, height_conditioned):
         reward = (pos_reward + height_reward) * 0.5
     else:
         reward = pos_reward
-    output_dict = dict(pos_reward=pos_reward, height_reward=height_reward)
+    output_dict = dict(pos_reward=pos_reward,
+                       height_reward=height_reward,
+                       tar_pos=tar_pos[..., 0:2],
+                       head_pos=head_pos[..., 0:2],
+                       height_tar=tar_pos[..., 2],
+                       height_head=head_pos[..., 2])
     return reward, output_dict
 
 
