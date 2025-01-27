@@ -176,23 +176,12 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
                 and self.config.get("log_output", False)
                 and self.progress_buf % 3 == 0
         ):
-            print(
-                f'speed: {output_dict["tar_dir_speed"].item():.3f}/{self._tar_speed.item():.3f}'
-            )
-            print(
-                f'error: {output_dict["tar_vel_err"].item():.3f}; tangent error: {output_dict["tangent_vel_err"].item():.3f}'
-            )
-
-
             results_output = {
                 "Speed": f'{output_dict["tar_dir_speed"].item():.3f} / {self._tar_speed.item():.3f}',
                 "Error": f'{output_dict["tar_vel_err"].item():.3f}',
                 "Tangent Error": f'{output_dict["tangent_vel_err"].item():.3f}',
             }
             self.print_results(results_output)
-        other_log_terms = {
-            "total_rew": self.rew_buf,
-        }
 
         self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
