@@ -13,12 +13,13 @@ env:
         accel_max: 1
         speed_max: 5
         speed_min: 0.
+        speed_z_max: 0.5
+        accel_z_max: 0.2
         fixed_path: False
         slow: False
         height_conditioned: ${..height_conditioned}
         start_speed_max: 1.5
-        head_change_max: 0.1
         head_height_max: 1.5
-        head_height_min: 0.5
+        head_height_min: 0.7
         use_naive_path_generator: False
       height_conditioned: True

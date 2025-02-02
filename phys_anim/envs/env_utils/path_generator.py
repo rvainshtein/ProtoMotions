@@ -61,20 +61,29 @@ class PathGenerator:
                 self.config.start_speed_max - self.config.speed_min
             ) * torch.rand([n], device=self.device) + self.config.speed_min  # Speed
 
-            dhead = 2 * torch.rand([n, num_verts - 1], device=self.device) - 1.0
-            dhead *= self.config.head_change_max
-            dhead[:, 0] = init_pos[..., 2]
+            dspeed_z = (2 * torch.rand([n, num_verts - 1], device=self.device) - 1.0)
+            dspeed_z *= self.config.accel_z_max * self.dt
+
+            speed_z = torch.zeros_like(dspeed_z)
+            head_height = torch.zeros((n, num_verts), device=self.device)
+            head_height[:, 0] = init_pos[:, 2]
 
             speed = torch.zeros_like(dspeed)
             speed[:, 0] = dspeed[:, 0]
-            head_height = torch.zeros_like(dhead)
-            head_height[:, 0] = init_pos[:, 2]
-            for i in range(1, dhead.shape[-1]):
-                head_height[:, i] = torch.clip(
-                    head_height[:, i - 1] + dhead[:, i],
-                    min=self.head_min,
-                    max=self.head_max,
-                )
+            for i in range(num_verts - 1):
+                if i > 0:
+                    speed_z[:, i] = speed_z[:, i - 1] + dspeed_z[:, i]
+                else:
+                    speed_z[:, i] = dspeed_z[:, i]  # Initial velocity
+
+                speed_z[:, i] = torch.clip(speed_z[:, i],
+                                         -self.config.speed_z_max,
+                                         self.config.speed_z_max)
+
+                head_height[:, i + 1] = head_height[:, i] + speed_z[:, i] * self.dt
+                head_height[:, i + 1] = torch.clip(head_height[:, i + 1],
+                                                   min=self.head_min,
+                                                   max=self.head_max)
                 if self.use_naive_path_generator:
                     max_speed = self.config.speed_max
                 else:
@@ -120,7 +129,7 @@ class PathGenerator:
 
             self.verts[env_ids, 0, :] = init_pos[..., 0:3]
             self.verts[env_ids, 1:] = vert_pos
-            self.verts[env_ids, 1:, 2] = head_height
+            self.verts[env_ids, :, 2] = head_height
 
     def get_num_verts(self):
         return self.verts.shape[1]
