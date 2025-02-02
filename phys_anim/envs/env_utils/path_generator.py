@@ -63,9 +63,7 @@ class PathGenerator:
 
             dhead = 2 * torch.rand([n, num_verts - 1], device=self.device) - 1.0
             dhead *= self.config.head_change_max
-            dhead[:, 0] = (self.head_max - self.head_min) * torch.rand(
-                [n], device=self.device
-            ) + self.head_min  # Head Height
+            dhead[:, 0] = init_pos[..., 2]
 
             speed = torch.zeros_like(dspeed)
             speed[:, 0] = dspeed[:, 0]

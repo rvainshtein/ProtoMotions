@@ -71,7 +71,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             [self.num_envs], device=self.device, dtype=torch.long
         )
 
-        self._use_text = True
+        self._use_text = False
         self._text_embedding = None
         if self._use_text:
             from transformers import AutoTokenizer, XCLIPTextModel
@@ -256,11 +256,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         )
         self.masked_mimic_target_poses[env_ids] = target_poses
 
-        self.masked_mimic_target_poses_masks[env_ids] = True
-        # self.masked_mimic_target_poses_masks[:, 5] = True
-        # # self.masked_mimic_target_poses_masks[:, 1] = True
+        # self.masked_mimic_target_poses_masks[env_ids] = True
+        self.masked_mimic_target_poses_masks[env_ids, 5] = True
+        # self.masked_mimic_target_poses_masks[:, 1] = True
         # self.masked_mimic_target_poses_masks[:, 2] = True
-        # self.masked_mimic_target_poses_masks[:, -1] = True
+        self.masked_mimic_target_poses_masks[env_ids, -1] = True
 
         too_far = (
             torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
