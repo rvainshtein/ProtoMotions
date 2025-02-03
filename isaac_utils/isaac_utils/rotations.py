@@ -490,3 +490,21 @@ def matrix_to_quaternion(matrix: torch.Tensor, w_last: bool) -> torch.Tensor:
         quat_candidates = wxyz_to_xyzw(quat_candidates)
 
     return quat_candidates
+
+
+@torch.jit.script
+def quat_conjugate(q: torch.Tensor, w_last: bool) -> torch.Tensor:
+    """
+    Conjugate of a quaternion.
+
+    Args:
+        q: quaternions of shape (..., 4).
+        w_last: If True, the real part of the quaternion is last.
+
+    Returns:
+        Conjugate of the quaternion as tensor of shape (..., 4).
+    """
+    if w_last:
+        return torch.cat([q[..., :3], -q[..., 3:]], dim=-1)
+    else:
+        return torch.cat([-q[..., :1], q[..., 1:]], dim=-1)

@@ -13,7 +13,7 @@ from phys_anim.utils.motion_lib import MotionLib
 from rich.console import Console
 from rich.table import Table
 
-from typing import Optional, TYPE_CHECKING, Dict
+from typing import Optional, TYPE_CHECKING, Dict, List
 
 if TYPE_CHECKING:
     from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
@@ -141,6 +141,9 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             self.motion_text_embeddings[:] = self._text_embedding
         if self.config.get("use_raise_hands_prior", False):
             self.create_raise_hands_prior(env_ids)
+        if self.config.get("raise_hands", False):
+            self.condition_type = "raise_hands"
+            self.create_extra_prior(env_ids)
 
     def compute_humanoid_obs(self, env_ids=None):
         humanoid_obs = super().compute_humanoid_obs(env_ids)
@@ -162,7 +165,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.masked_mimic_target_bodies_masks[:] = False
         self.target_pose_obs_mask[:] = False
         self.object_bounding_box_obs_mask[:] = False
-        self.motion_text_embeddings_mask[:] = False
+        self.motion_text_embeddings_mask[:] = self.config.get("use_text", False)
 
     def update_task(self, actions):
         pass
@@ -177,6 +180,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Parameter", style="dim")
         table.add_column("Value", justify="right")
+        table.add_row("Step", f"{self.progress_buf.item():.3f}")
         table.add_row("Reward", f"{self.rew_buf.item():.3f}")
         for key, value in results_dict.items():
             # if the value is a float, format it to 3 decimal places
@@ -196,37 +200,51 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.console.clear()
         self.console.print(table)
 
-    def create_raise_hands_prior(self, env_ids):
+    def create_extra_prior(self, env_ids):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        conditionable_bodies = self._get_condition_bodies()
 
-        right_hand_body_index = self.config.masked_mimic_conditionable_bodies.index("R_Hand")
-        left_hand_body_index = self.config.masked_mimic_conditionable_bodies.index("L_Hand")
-        self.right_hand_body_id = self.build_body_ids_tensor(['R_Hand'])
-        self.left_hand_body_id = self.build_body_ids_tensor(['L_Hand'])
-        self.target_pose_joints[:] = False
-        self.target_pose_joints[:, right_hand_body_index * 2] = True
-        self.target_pose_joints[:, left_hand_body_index * 2] = True
-        self.target_pose_obs_mask[:] = True
+        self._set_masks(env_ids, conditionable_bodies)
 
+        sparse_target_poses = self.build_sparse_target_poses_masked_with_time_common(
+            self.config.masked_mimic_obs.num_future_steps, env_ids
+        )
+        self.masked_mimic_target_poses[:] = sparse_target_poses
+
+    def _get_condition_bodies(self):
+        if self.condition_type == "raise_hands":
+            conditionable_bodies = ["R_Hand", "L_Hand"]
+        else:
+            raise NotImplementedError
+        return conditionable_bodies
+
+    def _set_masks(self, env_ids, conditionable_bodies: List[str]):
         new_mask = torch.zeros(
             (self.num_envs, self.config.masked_mimic_obs.num_future_steps, self.num_conditionable_bodies, 2),
             dtype=torch.bool,
             device=self.device, )
 
-        new_mask[:, :, right_hand_body_index, 0] = True
-        new_mask[:, :, left_hand_body_index, 0] = True
+        self.body_indices = []
+        self.body_ids = []
+        for body_name in conditionable_bodies:
+            body_index = self.config.masked_mimic_conditionable_bodies.index(body_name)
+            self.body_ids.append(self.build_body_ids_tensor([body_name]))
+            self.body_indices.append(body_index)
+            self.target_pose_joints[env_ids, body_index * 2] = True
+            new_mask[env_ids, :, body_index, 0] = True
 
         new_mask = new_mask.reshape(self.num_envs, -1)
-
+        self.target_pose_obs_mask[env_ids] = True
         self.masked_mimic_target_bodies_masks[:] = new_mask
-        sparse_target_poses = self.build_sparse_target_raise_hands_poses_masked_with_time(
-            self.config.masked_mimic_obs.num_future_steps, env_ids
-        )
-        self.masked_mimic_target_poses[:] = sparse_target_poses
         self.masked_mimic_target_poses_masks[env_ids] = True
+        if self.condition_type == "raise_hands":
+            turning_envs = self.progress_buf < self._heading_change_steps
+            self.masked_mimic_target_poses_masks[env_ids, :-1] = False
+            self.masked_mimic_target_poses_masks[env_ids, 5] = True
+            self.masked_mimic_target_poses_masks[turning_envs] = False
 
-    def build_sparse_target_raise_hands_poses_masked_with_time(self, num_future_steps, env_ids=None):
+    def build_sparse_target_poses_masked_with_time_common(self, num_future_steps, env_ids=None):
         num_envs = len(env_ids)
         time_offsets = (
                 torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
@@ -240,7 +258,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             [near_future_times, self.target_pose_time[env_ids].view(-1, 1)], dim=1
         )
 
-        obs = self.build_sparse_target_raise_hands_poses(all_future_times, env_ids).view(
+        obs = self.build_sparse_target_poses_common(all_future_times, env_ids).view(
             self.num_envs,
             num_future_steps + 1,
             self.masked_mimic_conditionable_bodies_ids.shape[0] + 1,
@@ -271,7 +289,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
         return combined_sparse_future_pose_obs.view(num_envs, -1)
 
-    def build_sparse_target_raise_hands_poses(self, raw_future_times, env_ids):
+    def build_sparse_target_poses_common(self, raw_future_times, env_ids):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
         """
@@ -308,42 +326,104 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             self.num_envs, num_future_steps, *cur_gr.shape[1:]
         )
 
-        hands_pos = torch.zeros((num_envs, num_future_steps, 2, 3), device=self.device, dtype=torch.float32)
-        hands_dict = {
-            "hands_height": 1.2,
-            "hands_distance": 0.3,
-            "hands_gap": 0.4
-        }
-        hands_pos[..., 0, 0] = hands_dict["hands_distance"]
-        hands_pos[..., 0, 1] = hands_dict["hands_gap"] * 1. / 2
-        hands_pos[..., 0, 2] = hands_dict["hands_height"]
-
-        hands_pos[..., 1, 0] = hands_dict["hands_distance"]
-        hands_pos[..., 1, 1] = -hands_dict["hands_gap"] * 1. / 2
-        hands_pos[..., 1, 2] = hands_dict["hands_height"]
-
         # Calculate expanded_root_heading properly
         expanded_root_rot = expanded_body_rot[:, :, 0, :]  # Extract root rotation
         expanded_root_heading = torch_utils.calc_heading_quat_inv(expanded_root_rot.reshape(-1, 4), self.w_last)
+        # This might not be generalized to multiple bodies not hands
         expanded_root_heading = expanded_root_heading.reshape(num_envs, num_future_steps, 1, 4).expand(-1, -1, 2,
                                                                                                        -1)  # Repeat for two hands
 
-        # Prepare hands_pos for rotation
-        hands_pos_flat = hands_pos.reshape(-1, 3)  # Flatten hands_pos to match expected input shape
+        pos_condition = self.get_pos_conditions(env_ids, num_future_steps)
 
-        # Apply rotation to hands positions
-        rotated_hands_pos = rotations.quat_rotate(expanded_root_heading.reshape(-1, 4), hands_pos_flat, w_last=True)
-        rotated_hands_pos = rotated_hands_pos.reshape(num_envs, num_future_steps, 2, 3)  # Reshape back
+        # Prepare pos_condition for rotation
+        pos_condition_flat = pos_condition.reshape(-1, 3)  # Flatten pos_condition to match expected input shape
+
+        # Apply rotation to positions
+        rotated_pos_condition = rotations.quat_rotate(expanded_root_heading.reshape(-1, 4), pos_condition_flat,
+                                                      w_last=True)
+        rotated_pos_condition = rotated_pos_condition.reshape(num_envs, num_future_steps, 2, 3)  # Reshape back
 
         # Translate to root position
+        rotated_pos_condition = rotated_pos_condition.view(num_envs, num_future_steps, 2, 3)
         root_positions = cur_gt[:, None, :, :]  # [num_envs, 1, num_bodies, 3]
-        rotated_hands_pos = rotated_hands_pos.view(num_envs, num_future_steps, 2, 3)
-        world_hands_pos = rotated_hands_pos + root_positions[:, :, [self.right_hand_body_id, self.left_hand_body_id], :]
+        world_pos_condition = rotated_pos_condition + root_positions[:, :, self.body_ids, :]
 
         # Update target positions
-        reshaped_target_pos[:, :, self.right_hand_body_id, :] = world_hands_pos[:, :, 0, :].unsqueeze(-2)
-        reshaped_target_pos[:, :, self.left_hand_body_id, :] = world_hands_pos[:, :, 1, :].unsqueeze(-2)
+        for i, body_id in enumerate(self.body_ids):
+            reshaped_target_pos[:, :, body_id, :] = world_pos_condition[:, :, i, :].unsqueeze(-2)
 
+        obs = self._finalize_sparse_target_poses(expanded_body_pos, expanded_body_rot, flat_target_pos, flat_target_rot,
+                                                 flat_target_vel, num_future_steps, reshaped_target_pos, num_envs)
+
+        return obs
+
+    def get_pos_conditions(self, env_ids, num_future_steps):
+        num_envs = len(env_ids)
+        time_offsets = (
+                torch.arange(1, num_future_steps, device=self.device, dtype=torch.long)
+                * self.dt
+        )
+
+        near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
+        raw_future_times = torch.cat(
+            [near_future_times, self.target_pose_time.view(-1, 1)], dim=1
+        )
+        if self.condition_type == "raise_hands":
+            # [E x T x num_hands x coords]
+            hands_pos = torch.zeros((num_envs, num_future_steps, 2, 3), device=self.device, dtype=torch.float32)
+            hands_dict = {
+                "hands_height": 0.4,
+                "hands_distance": 0.1,
+                "hands_gap": 0.4
+            }
+            hands_pos[..., 0, 0] = hands_dict["hands_distance"]
+            hands_pos[..., 0, 1] = hands_dict["hands_gap"] * 1. / 2
+            hands_pos[..., 0, 2] = hands_dict["hands_height"]
+            hands_pos[..., 1, 0] = hands_dict["hands_distance"]
+            hands_pos[..., 1, 1] = -hands_dict["hands_gap"] * 1. / 2
+            hands_pos[..., 1, 2] = hands_dict["hands_height"]
+
+            if 'Direction' in str(type(self)):
+                current_state = self.get_bodies_state()
+                cur_gt, cur_gr = current_state.body_pos[env_ids], current_state.body_rot[env_ids]
+                cur_root_rot = cur_gr[:, 0, :]
+
+                root_heading = torch_utils.calc_heading_quat_inv(cur_root_rot, self.w_last)
+                # root_heading = torch_utils.calc_heading_quat(cur_root_rot, self.w_last)
+                root_heading_conj = rotations.quat_conjugate(root_heading, self.w_last)
+
+                rotation_vec = root_heading_conj
+
+                # Transform the global forward direction to the root's local frame using quat_rotate with the conjugate
+                tar_dir_global = torch.cat([self._tar_dir, torch.zeros((self.num_envs, 1), device=self.device)], dim=-1)
+                # Ensure tar_dir_global is normalized
+                tar_dir_global = tar_dir_global / torch.norm(tar_dir_global, dim=-1, keepdim=True)
+
+                forward_dir_local = torch_utils.quat_rotate(
+                    rotation_vec,
+                    tar_dir_global,
+                    self.w_last
+                )
+
+                # resulting shape: [E x T x coords]
+                forward_speed_translation = forward_dir_local[..., None] * self._tar_speed[:] * (
+                        raw_future_times - self.motion_times) * 0.5
+                # resulting shape: [E x T x num_hands x coords]
+                forward_speed_translation = forward_speed_translation.swapaxes(1, 2).unsqueeze(-2).repeat(1, 1, 2, 1)
+                forward_speed_translation[..., 2] = 0  # ensure vertical speed is 0
+                hands_pos[..., 0] = 0  # forward distance is now dictated by the forward_speed_translation
+                hands_pos += forward_speed_translation
+
+                # sanity check:
+                # print hands pos but the float format is .2f
+                # compute correlation (angle) between forward_dir_local and root rotation in local frame
+                torch.set_printoptions(precision=2, sci_mode=False)
+                print(forward_dir_local[0].dot(torch.tensor([1., 0., 0.], device=self.device)))
+                print(hands_pos[:, 5, 0, :2])
+            return hands_pos
+
+    def _finalize_sparse_target_poses(self, expanded_body_pos, expanded_body_rot, flat_target_pos, flat_target_rot,
+                                      flat_target_vel, num_future_steps, reshaped_target_pos, num_envs):
         flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
         # override to set the target root parameters
 
@@ -361,9 +441,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             heading_rot_expand.shape[0] * heading_rot_expand.shape[1],
             heading_rot_expand.shape[2],
         )
-
         root_pos_expand = root_pos.unsqueeze(-2)
-
         """target"""
         # target body pos   [N, 3xB]
         target_rel_body_pos = flat_target_pos - flat_cur_pos
@@ -374,7 +452,6 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         flat_target_rel_body_pos = torch_utils.quat_rotate(
             flat_heading_rot, flat_target_rel_body_pos, self.w_last
         )
-
         # target body pos   [N, 3xB]
         flat_target_body_pos = (flat_target_pos - root_pos_expand).reshape(
             flat_target_pos.shape[0] * flat_target_pos.shape[1],
@@ -383,7 +460,6 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         flat_target_body_pos = torch_utils.quat_rotate(
             flat_heading_rot, flat_target_body_pos, self.w_last
         )
-
         # target body rot   [N, 6xB]
         target_rel_body_rot = rotations.quat_mul(
             rotations.quat_conjugate(flat_cur_rot, self.w_last),
@@ -393,7 +469,6 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         target_rel_body_rot_obs = torch_utils.quat_to_tan_norm(
             target_rel_body_rot.view(-1, 4), self.w_last
         ).view(target_rel_body_rot.shape[0], -1)
-
         # target body rot   [N, 6xB]
         target_body_rot = rotations.quat_mul(
             heading_rot_expand, flat_target_rot, self.w_last
@@ -401,28 +476,24 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         target_body_rot_obs = torch_utils.quat_to_tan_norm(
             target_body_rot.view(-1, 4), self.w_last
         ).view(target_rel_body_rot.shape[0], -1)
-
         padded_flat_target_rel_body_pos = torch.nn.functional.pad(
             flat_target_rel_body_pos, [0, 3], "constant", 0
         )
         sub_sampled_target_rel_body_pos = padded_flat_target_rel_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
         padded_flat_target_body_pos = torch.nn.functional.pad(
             flat_target_body_pos, [0, 3], "constant", 0
         )
         sub_sampled_target_body_pos = padded_flat_target_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
         sub_sampled_target_rel_body_rot_obs = target_rel_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
         sub_sampled_target_body_rot_obs = target_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
-
         # Heading
         target_heading_rot = torch_utils.calc_heading_quat(
             flat_target_rot[:, 0, :], self.w_last
@@ -432,8 +503,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
                 heading_rot_expand[:, 0, :], target_heading_rot, self.w_last
             ).view(-1, 4),
             self.w_last,
-        ).reshape(self.num_envs, num_future_steps, 1, 6)
-
+        ).reshape(num_envs, num_future_steps, 1, 6)
         # Velocity
         target_root_vel = flat_target_vel[:, 0, :]
         target_root_vel[..., -1] = 0  # ignore vertical speed
@@ -444,9 +514,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             target_rel_vel, [0, 3], "constant", 0
         )
         padded_target_rel_vel = padded_target_rel_vel.reshape(
-            self.num_envs, num_future_steps, 1, 6
+            num_envs, num_future_steps, 1, 6
         )
-
         heading_and_velocity = torch.cat(
             [
                 target_rel_heading_rot,
@@ -456,7 +525,6 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             ],
             dim=-1,
         )
-
         # In masked_mimic allow easy re-shape to [batch, time, joint, type (transform/rotate), features]
         obs = torch.cat(
             (
@@ -467,8 +535,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             ),
             dim=-1,
         )  # [batch, timesteps, joints, 24]
-        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(self.num_envs, -1)
-
+        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(num_envs, -1)
         return obs
 
 
