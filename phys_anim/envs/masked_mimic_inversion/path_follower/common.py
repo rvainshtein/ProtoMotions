@@ -19,7 +19,7 @@ else:
 
 class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: ignore[misc]
     def __init__(
-        self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
+            self, config, device: torch.device, motion_lib: Optional[MotionLib] = None
     ):
         super().__init__(config=config, device=device, motion_lib=motion_lib)
         self.path_obs = torch.zeros(
@@ -52,8 +52,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
             active_envs = self._current_accumulated_errors[env_ids] > 0
             average_distances = (
-                self._current_accumulated_errors[env_ids][active_envs]
-                / self._last_length[env_ids][active_envs]
+                    self._current_accumulated_errors[env_ids][active_envs]
+                    / self._last_length[env_ids][active_envs]
             )
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
@@ -81,8 +81,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
         if self.reset_path_ids is not None and len(self.reset_path_ids) > 0:
             reset_head_position = bodies_positions[
-                self.reset_path_ids, self.head_body_id, :
-            ]
+                                  self.reset_path_ids, self.head_body_id, :
+                                  ]
             flat_reset_head_position = reset_head_position.view(-1, 3)
             ground_below_reset_head = self.get_ground_heights(
                 bodies_positions[:, self.head_body_id, :2]
@@ -216,7 +216,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
             )
 
             assert (
-                self.progress_buf[self.reset_path_ids] <= 1
+                    self.progress_buf[self.reset_path_ids] <= 1
             ).all(), (
                 f"Progress should be reset {self.progress_buf[self.reset_path_ids]}"
             )
@@ -261,7 +261,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.target_pose_joints[env_ids, body_index * 2 + 1] = True
         # self.target_pose_joints[:, -2:] = True  # heading & speed
         self.target_pose_time[env_ids] = (
-            self.motion_times[env_ids] + self._traj_sample_timestep
+                self.motion_times[env_ids] + self._traj_sample_timestep
         )
 
         target_poses = self.build_sparse_target_path_poses_masked_with_time(
@@ -276,8 +276,8 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         self.masked_mimic_target_poses_masks[:, -1] = True
 
         too_far = (
-            torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
-            > 0.4
+                torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
+                > 0.4
         )
         self.masked_mimic_target_poses_masks[env_ids[too_far], :-1] = False
 
@@ -340,7 +340,7 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         return traj_samples, traj_samples_p1
 
     def build_sparse_target_path_poses(
-        self, raw_future_times, target_root_pos, target_root_rot, env_ids
+            self, raw_future_times, target_root_pos, target_root_rot, env_ids
     ):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
@@ -521,13 +521,13 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         return obs
 
     def build_sparse_target_path_poses_masked_with_time(
-        self, target_root_pos: Tensor, target_root_rot: Tensor, env_ids
+            self, target_root_pos: Tensor, target_root_rot: Tensor, env_ids
     ):
         num_envs = len(env_ids)
         num_future_steps = target_root_pos.shape[1] - 1
         time_offsets = (
-            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-            * self.dt
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
         )
 
         near_future_times = self.motion_times[env_ids].unsqueeze(
@@ -573,11 +573,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
 
 @torch.jit.script
 def compute_path_observations(
-    root_states: Tensor,
-    head_states: Tensor,
-    traj_samples: Tensor,
-    w_last: bool,
-    height_conditioned: bool,
+        root_states: Tensor,
+        head_states: Tensor,
+        traj_samples: Tensor,
+        w_last: bool,
+        height_conditioned: bool,
 ) -> Tensor:
     root_rot = root_states[:, 3:7]
     heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
@@ -629,7 +629,11 @@ def compute_path_reward(head_pos, tar_pos, height_conditioned):
     height_reward = torch.exp(-height_err_scale * height_err)
 
     if height_conditioned:
-        reward = (pos_reward + height_reward) * 0.5
+        # Compute weighted harmonic mean
+        pos_weight = 0.5
+        reward = 2 * pos_weight * pos_reward * height_reward / (
+                    pos_weight * pos_reward + (1 - pos_weight) * height_reward + 1e-6)
+
     else:
         reward = pos_reward
     output_dict = dict(pos_reward=pos_reward,
@@ -643,20 +647,20 @@ def compute_path_reward(head_pos, tar_pos, height_conditioned):
 
 @torch.jit.script
 def compute_humanoid_reset(
-    reset_buf,
-    progress_buf,
-    contact_buf,
-    non_termination_contact_body_ids,
-    rigid_body_pos,
-    tar_pos,
-    max_episode_length,
-    fail_dist,
-    fail_height_dist,
-    enable_early_termination,
-    enable_path_termination,
-    enable_height_termination,
-    termination_heights,
-    head_body_id,
+        reset_buf,
+        progress_buf,
+        contact_buf,
+        non_termination_contact_body_ids,
+        rigid_body_pos,
+        tar_pos,
+        max_episode_length,
+        fail_dist,
+        fail_height_dist,
+        enable_early_termination,
+        enable_path_termination,
+        enable_height_termination,
+        termination_heights,
+        head_body_id,
 ):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, bool, bool, bool, Tensor, int) -> Tuple[Tensor, Tensor]
     terminated = torch.zeros_like(reset_buf)
