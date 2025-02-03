@@ -80,11 +80,10 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._tar_speed = torch.ones(
             [self.num_envs], device=self.device, dtype=torch.float
         )
-        
+
         self._heading_turn_steps = torch.zeros(
             [self.num_envs], device=self.device, dtype=torch.int64
         )
-
 
     def reset_task(self, env_ids):
         if len(env_ids) > 0:
@@ -100,6 +99,24 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             self.reset_heading_task(rest_env_ids)
 
     def reset_heading_task(self, env_ids):
+        if len(env_ids) > 0:
+            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
+            active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
+                    (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
+            )
+            average_distances = self._current_accumulated_errors[env_ids][
+                                    active_envs
+                                ] / (
+                                        self._last_length[env_ids][active_envs]
+                                        - self._heading_turn_steps[env_ids][active_envs]
+                                )
+            self._distances.extend(average_distances.cpu().tolist())
+            self._current_accumulated_errors[env_ids] = 0
+            self._failures.extend(
+                (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
+            )
+            self._current_failures[env_ids] = 0
+
         n = len(env_ids)
         if np.random.binomial(1, self._random_heading_probability):
             dir_theta = 2 * np.pi * torch.rand(n, device=self.device) - np.pi
@@ -146,7 +163,6 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         self._heading_turn_steps[env_ids] = 60 * 1 + self.progress_buf[env_ids]
 
-
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
         if env_ids is None:
@@ -185,11 +201,30 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
         self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
-        # self.compute_failures_and_distances()
-        # self.accumulate_errors()
+        self.compute_failures_and_distances()
+        self.accumulate_errors()
 
-        self.last_unscaled_rewards: Dict[str, Tensor] = self.log_dict
-        self.last_other_rewards = other_log_terms
+    def compute_failures_and_distances(self):
+        current_state = self.get_bodies_state()
+        body_pos, body_rot = (
+            current_state.body_pos,
+            current_state.body_rot,
+        )
+        root_vel = self._prev_root_pos[:, :2] - body_pos[:, 0, :2]
+        tar_dir_vel = self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1) * self.dt
+        tangent_vel = root_vel - tar_dir_vel
+        tangent_vel_error = torch.norm(tangent_vel, dim=-1)
+        turning_envs = self._heading_turn_steps > self.progress_buf
+        turned_envs = ~turning_envs
+
+        tar_dir_speed = torch.sum(self._tar_dir * root_vel, dim=-1)
+        tar_speed_error = self._tar_speed - tar_dir_speed
+
+        self._current_accumulated_errors[turned_envs] += tangent_vel_error[turned_envs]
+        self._current_failures[turned_envs] += torch.abs(tar_speed_error[turned_envs]) > 0.75
+        self._current_failures[turning_envs] = 0
+        self._current_accumulated_errors[turning_envs] = 0
+        self._last_length[:] = self.progress_buf[:]
 
     def create_chens_prior(self, env_ids):
         turning_envs = self._heading_turn_steps < 0  # > (self.progress_buf + 15)
@@ -202,10 +237,10 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         )
 
         self.target_pose_time[turning_envs] = (
-            self.motion_times[turning_envs] + self.dt * time_left_to_turn[turning_envs]
+                self.motion_times[turning_envs] + self.dt * time_left_to_turn[turning_envs]
         )
         self.target_pose_time[turned_envs] = (
-            self.motion_times[turned_envs] + 1.0
+                self.motion_times[turned_envs] + 1.0
         )  # .5 second
         self.target_pose_obs_mask[:] = True
         self.target_pose_joints[:] = False
@@ -239,7 +274,6 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self.masked_mimic_target_poses_masks[:] = False
         self.masked_mimic_target_poses_masks[:, -1] = True
         self.masked_mimic_target_poses_masks[turned_envs, -2] = True
-
 
     ###############################################################
     # Helpers
@@ -286,9 +320,9 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         reshaped_target_pos[:, :, 0, :2] = cur_gt[:, 0, :2].unsqueeze(1).clone()
         for frame_idx in range(num_future_steps):
             reshaped_target_pos[:, frame_idx, 0, :2] += (
-                self._tar_dir[:]
-                * self._tar_speed[:].unsqueeze(-1)
-                * (raw_future_times[:, frame_idx] - self.motion_times).unsqueeze(-1)
+                    self._tar_dir[:]
+                    * self._tar_speed[:].unsqueeze(-1)
+                    * (raw_future_times[:, frame_idx] - self.motion_times).unsqueeze(-1)
             )
 
         reshaped_target_pos[turning_envs, :, 0, :2] = (
@@ -312,7 +346,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         )
 
         non_flat_target_vel[:, :, 0, :2] = (
-            self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1)
+                self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1)
         ).view(self._tar_dir.shape[0], 1, 2)
         flat_target_vel = non_flat_target_vel.reshape(flat_target_vel.shape)
         # override to set the target root parameters
@@ -450,8 +484,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
 
     def build_sparse_target_heading_poses_masked_with_time(self, num_future_steps):
         time_offsets = (
-            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-            * self.dt
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
         )
 
         near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
@@ -491,6 +525,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         )
 
         return combined_sparse_future_pose_obs.view(self.num_envs, -1)
+
 
 #####################################################################
 ###=========================jit functions=========================###
@@ -539,7 +574,8 @@ def compute_heading_reward(
     tar_speed: The target speed
     dt: The time step
     """
-    vel_err_scale = 0.25
+    # vel_err_scale = 0.25
+    vel_err_scale = 1.0
     tangent_err_w = 0.1
 
     delta_root_pos = root_pos - prev_root_pos
