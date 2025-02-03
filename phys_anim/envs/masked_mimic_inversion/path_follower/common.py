@@ -269,11 +269,11 @@ class BaseMaskedMimicPathFollowing(MaskedMimicPathFollowingHumanoid):  # type: i
         )
         self.masked_mimic_target_poses[env_ids] = target_poses
 
-        self.masked_mimic_target_poses_masks[env_ids] = True
-        # self.masked_mimic_target_poses_masks[:, 5] = True
+        # self.masked_mimic_target_poses_masks[env_ids] = True
+        self.masked_mimic_target_poses_masks[:, 5] = True
         # # self.masked_mimic_target_poses_masks[:, 1] = True
         # self.masked_mimic_target_poses_masks[:, 2] = True
-        # self.masked_mimic_target_poses_masks[:, -1] = True
+        self.masked_mimic_target_poses_masks[:, -1] = True
 
         too_far = (
             torch.norm(traj_samples[:, 0, :2] - bodies_positions[:, 0, :2], dim=-1)
