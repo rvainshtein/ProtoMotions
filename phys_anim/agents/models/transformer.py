@@ -133,7 +133,7 @@ class TransformerWithNorm(nn.Module):
         )
 
     def get_extracted_features(
-        self, input_dict, already_normalized=False, return_norm_obs=False
+            self, input_dict, already_normalized=False, return_norm_obs=False
     ):
         type_array = torch.arange(
             len(self.extra_input_keys) + 1,
@@ -164,8 +164,15 @@ class TransformerWithNorm(nn.Module):
         )
 
         for key_idx, key in enumerate(self.extra_input_keys):
-            if key not in self.extra_input_keys:
+            if key not in input_dict.keys():
                 continue
+
+            DEBUG = False
+            # DEBUG = True
+            if DEBUG is True:
+                print("!!!!!!! DEBUG !!!!!!!")
+                if key == 'inversion_obs':
+                    continue
 
             key_obs = input_dict[key]
             used_mask_multiply = False
@@ -192,7 +199,7 @@ class TransformerWithNorm(nn.Module):
                 elif operation.type == "embedding_per_entry":
                     embedding_per_entry_module = self.extra_input_models[
                         key + "_" + operation.name
-                    ]
+                        ]
                     key_type_array = torch.arange(
                         embedding_per_entry_module.num_embeddings,
                         dtype=torch.long,
@@ -248,7 +255,7 @@ class TransformerWithNorm(nn.Module):
             if self.mask_keys[key] is not None and not used_mask_multiply:
                 key_mask = input_dict[self.mask_keys[key]]
                 if not self.config.extra_inputs[key].config.get(
-                    "mask_valid_as_zeros", True
+                        "mask_valid_as_zeros", True
                 ):
                     key_mask = key_mask.logical_not()
             else:
