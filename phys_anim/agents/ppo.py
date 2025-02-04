@@ -25,8 +25,14 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+import datetime
 
 import torch
+from rich.console import Console
+from rich.box import ROUNDED
+from rich.columns import Columns
+from rich.panel import Panel
+from rich.table import Table
 
 from torch import nn, Tensor
 
@@ -49,7 +55,7 @@ from phys_anim.envs.humanoid.common import Humanoid
 from phys_anim.utils.running_mean_std import RunningMeanStd
 from phys_anim.agents.callbacks.base_callback import RL_EvalCallback
 from rich.progress import track
-from tqdm import tqdm
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn
 
 
 def get_params(obj) -> List[nn.Parameter]:
@@ -65,6 +71,15 @@ def get_params(obj) -> List[nn.Parameter]:
         for group in as_list:
             params = params + list(group["params"])
         return params
+
+
+def convert_value(val):
+    """Convert a torch tensor or other numeric type to a Python float if possible."""
+    try:
+        # If the value has an 'item' method (e.g. a torch.Tensor), use it.
+        return val.item() if hasattr(val, "item") else float(val)
+    except Exception:
+        return val
 
 
 class PPO:
@@ -513,6 +528,26 @@ class PPO:
         return actor_state
 
     def post_eval_env_step(self, actor_state):
+        self.current_rewards += actor_state["rewards"]
+        self.current_lengths += 1
+
+        done_indices = actor_state["done_indices"]
+
+        self.episode_reward_meter.update(self.current_rewards[done_indices])
+        self.episode_length_meter.update(self.current_lengths[done_indices])
+        # self.experience_buffer.update_data("rewards", actor_state["step"], actor_state["rewards"])
+
+        not_dones = 1.0 - actor_state["dones"].float()
+
+        self.current_rewards = self.current_rewards * not_dones
+        self.current_lengths = self.current_lengths * not_dones
+
+        # for k in self.actor_state_to_experience_buffer_list:
+        #     # why -1? because we are storing the data from the previous step (???)
+        #     self.experience_buffer.update_data(k, actor_state["step"] - 1, actor_state[k])
+
+        self.episode_env_tensors.add(actor_state["extras"]["to_log"])
+
         for c in self.eval_callbacks:
             actor_state = c.on_post_eval_env_step(actor_state)
         return actor_state
@@ -918,33 +953,109 @@ class PPO:
         actor_state = self.create_actor_state()
         step = 0
         games_count = 0
-        print("Evaluating policy...")
-        while (
-                not actor_state["stop"]
-                and (self.config.num_games is None or games_count < self.config.num_games)
-                and (
-                        self.config.max_eval_steps is None or step < self.config.max_eval_steps
+        console = Console()
+        console.print("[bold yellow]Evaluating policy...[/bold yellow]")
+
+        # Total values for steps and games, if defined.
+        step_total = self.config.max_eval_steps  # May be None
+        games_total = self.config.num_games  # May be None
+        num_envs = self.num_envs  # Number of environments
+        episode_limit = self.env.config.max_episode_length  # Steps per env round
+
+        # Helper: compute current episode progress (resetting each episode)
+        def current_episode_progress(step):
+            return step % episode_limit if episode_limit else step
+
+        # Set up Rich Progress with an extra column for episode progress.
+        with Progress(
+                TextColumn("[bold blue]{task.description}"),
+                BarColumn(),
+                TextColumn("{task.percentage:>3.0f}%"),
+                "•",
+                TextColumn("[bold cyan]Step:[/bold cyan] {task.fields[step]}"),
+                "•",
+                TextColumn("[bold magenta]Games:[/bold magenta] {task.fields[games]}"),
+                "•",
+                TextColumn("[bold green]Envs:[/bold green] {task.fields[envs]}"),
+                "•",
+                TextColumn("[bold yellow]Episode: {task.fields[episode_progress]}/{task.fields[episode_limit]}"),
+                "•",
+                TimeElapsedColumn(),
+                "•",
+                TimeRemainingColumn()
+        ) as progress:
+            # Create two tasks; initialize with custom fields.
+            step_task = progress.add_task(
+                "Evaluation Steps", total=step_total,
+                step=0,
+                games=0,
+                envs=num_envs,
+                episode_limit=episode_limit,
+                episode_progress=0
+            )
+            games_task = progress.add_task(
+                "Games Completed", total=games_total,
+                step=0,
+                games=0,
+                envs=num_envs,
+                episode_limit=episode_limit,
+                episode_progress=0
+            )
+
+            while (
+                    not actor_state["stop"]
+                    and (self.config.num_games is None or games_count < self.config.num_games)
+                    and (self.config.max_eval_steps is None or step < self.config.max_eval_steps)
+            ):
+                # Update actor state.
+                actor_state["step"] = step
+                actor_state["games_count"] = games_count
+                actor_state = self.handle_reset(actor_state)
+
+                # Run environment step.
+                actor_state = self.pre_eval_env_step(actor_state)
+                actor_state = self.env_step(actor_state)
+
+                # Determine done indices.
+                all_done_indices = actor_state["dones"].nonzero(as_tuple=False)
+                done_indices = all_done_indices.squeeze(-1)
+                actor_state["done_indices"] = done_indices
+
+                actor_state = self.post_eval_env_step(actor_state)
+
+                # Number of games completed this iteration.
+                games_completed = len(done_indices)
+                games_count += games_completed
+                step += 1
+
+                # Compute current episode progress (reset when reaching episode_limit).
+                ep_progress = current_episode_progress(step)
+
+                # Update tasks with new values.
+                progress.update(
+                    step_task,
+                    advance=1,
+                    step=step,
+                    games=games_count,
+                    envs=num_envs,
+                    episode_progress=ep_progress,
+                    episode_limit=episode_limit,
                 )
-        ):
-            actor_state["step"] = step
-            actor_state["games_count"] = games_count
-            actor_state = self.handle_reset(actor_state)
+                progress.update(
+                    games_task,
+                    advance=games_completed,
+                    step=step,
+                    games=games_count,
+                    envs=num_envs,
+                    episode_progress=ep_progress,
+                    episode_limit=episode_limit,
+                )
 
-            # Invoke actor and critic, generate actions/values
-            actor_state = self.pre_eval_env_step(actor_state)
+            console.print("[bold green]Evaluation complete![/bold green]")
 
-            # Step env
-            actor_state = self.env_step(actor_state)
+        eval_log_dict, evaluated_score = self.calc_eval_metrics()
 
-            all_done_indices = actor_state["dones"].nonzero(as_tuple=False)
-            done_indices = all_done_indices.squeeze(-1)
-            actor_state["done_indices"] = done_indices
-
-            actor_state = self.post_eval_env_step(actor_state)
-
-            games_count += len(done_indices)
-            step += 1
-
+        self.post_eval_logging(eval_log_dict)
         self.post_evaluate_policy()
 
     def pre_evaluate_policy(self, reset_env=True):
@@ -1020,6 +1131,60 @@ class PPO:
 
     def terminate_early(self):
         self._should_stop = True
+
+    def post_eval_logging(self, eval_log_dict: Dict = None):
+        if eval_log_dict is None:
+            eval_log_dict = {}
+
+        # Build core log entries, converting torch tensors to floats.
+        core_metrics = {
+            "Episode Length": convert_value(self.episode_length_meter.get_mean()),
+            "Episode Reward": convert_value(self.episode_reward_meter.get_mean()),
+            # "Task Reward": convert_value(self.experience_buffer.rewards.mean()),
+        }
+
+        # Fetch additional environment logs and convert values if needed.
+        env_metrics_raw = self.episode_env_tensors.compute_and_clear()
+        # Update the evaluation log dictionary with environment metrics.
+        eval_log_dict.update(env_metrics_raw)
+
+        env_metrics = {
+            f"Env {k}": convert_value(v)
+            for k, v in eval_log_dict.items()
+            if any(keyword in k.lower() for keyword in ("reward", "episode", "reach"))
+        }
+
+        # Create a table for core metrics.
+        core_table = Table(title="Core Metrics", box=ROUNDED, border_style="blue")
+        core_table.add_column("Metric", style="bold cyan", justify="left")
+        core_table.add_column("Value", style="bold white", justify="right")
+        for key, value in core_metrics.items():
+            core_table.add_row(key, f"{value:.4f}")
+
+        # Create a table for environment metrics if any exist.
+        env_table = None
+        if env_metrics:
+            env_table = Table(title="Environment Metrics", box=ROUNDED, border_style="green")
+            env_table.add_column("Metric", style="bold magenta", justify="left")
+            env_table.add_column("Value", style="bold white", justify="right")
+            for key, value in env_metrics.items():
+                env_table.add_row(key, f"{value:.4f}")
+
+        # Build a header panel with a timestamp.
+        header_text = (
+            "[bold yellow]Training Evaluation Summary[/bold yellow]\n"
+            f"[dim]Timestamp: {datetime.datetime.now():%Y-%m-%d %H:%M:%S}[/dim]"
+        )
+
+        # Use Columns to display tables side by side if both exist.
+        content = Columns([core_table, env_table], equal=True, expand=True) if env_table else core_table
+
+        # Wrap the content in a Panel for a polished look.
+        panel = Panel(content, title=header_text, border_style="bright_blue", box=ROUNDED, padding=(1, 2))
+
+        # Print the panel to the console.
+        console = Console()
+        console.print(panel)
 
 
 def normalization_with_masks(values: Tensor, masks: Optional[Tensor]):
