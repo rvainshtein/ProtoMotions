@@ -26,6 +26,8 @@ class PathGenerator:
         self.use_naive_path_generator = (
             self.config.use_naive_path_generator or not self.height_conditioned
         )
+        self._speed_z_max = self.config.get('speed_z_max', 0.5)  # for backward compatibility
+        self._accel_z_max = self.config.get('accel_z_max', 0.2)  # for backward compatibility
 
     def reset(self, env_ids, init_pos):
         init_pos = init_pos.clone()
@@ -62,7 +64,7 @@ class PathGenerator:
             ) * torch.rand([n], device=self.device) + self.config.speed_min  # Speed
 
             dspeed_z = (2 * torch.rand([n, num_verts - 1], device=self.device) - 1.0)
-            dspeed_z *= self.config.accel_z_max * self.dt
+            dspeed_z *= self._accel_z_max * self.dt
 
             speed_z = torch.zeros_like(dspeed_z)
             head_height = torch.zeros((n, num_verts), device=self.device)
@@ -77,8 +79,8 @@ class PathGenerator:
                     speed_z[:, i] = dspeed_z[:, i]  # Initial velocity
 
                 speed_z[:, i] = torch.clip(speed_z[:, i],
-                                         -self.config.speed_z_max,
-                                         self.config.speed_z_max)
+                                         -self._speed_z_max,
+                                         self._speed_z_max)
 
                 head_height[:, i + 1] = head_height[:, i] + speed_z[:, i] * self.dt
                 head_height[:, i + 1] = torch.clip(head_height[:, i + 1],
