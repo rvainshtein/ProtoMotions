@@ -18,3 +18,4 @@ eval_overrides:
     config:
       max_episode_length: 300
       log_output: True
+  device: 0
