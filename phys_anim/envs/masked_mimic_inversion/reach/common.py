@@ -30,7 +30,7 @@ from isaac_utils import torch_utils, rotations
 
 import torch
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Tuple, Dict
 
 from torch import Tensor
 
@@ -150,9 +150,9 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
     ###############################################################
     def compute_reward(self, actions):
         reach_body_pos = self.rigid_body_pos[:, self.reach_body_id, :]
-        self.rew_buf[:] = compute_reach_reward(reach_body_pos, self._tar_pos)
+        self.rew_buf[:], output_dict = compute_reach_reward(reach_body_pos, self._tar_pos)
 
-        # self.log_dict.update(output_dict)
+        self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
         self.compute_failures_and_distances()
         self.accumulate_errors()
@@ -414,12 +414,26 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
 ###=========================jit functions=========================###
 #####################################################################
 
+# @torch.jit.script
+# def compute_location_observations(root_states, tar_pos, w_last=True):
+#     # type: (Tensor, Tensor, bool) -> Tensor
+#     root_rot = root_states[:, 3:7]
+#     heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
+#     local_tar_pos = rotations.quat_rotate(heading_rot, tar_pos, w_last)
+#
+#     obs = local_tar_pos
+#     return obs
+
 @torch.jit.script
 def compute_location_observations(root_states, tar_pos, w_last=True):
     # type: (Tensor, Tensor, bool) -> Tensor
+    root_pos = root_states[:, 0:3]
     root_rot = root_states[:, 3:7]
-    heading_rot = torch_utils.calc_heading_quat_inv(root_rot, w_last)
-    local_tar_pos = rotations.quat_rotate(heading_rot, tar_pos, w_last)
+
+    heading_rot_inv = torch_utils.calc_heading_quat_inv(root_rot, w_last)
+    local_tar_pos = tar_pos - root_pos
+
+    local_tar_pos = torch_utils.quat_rotate(heading_rot_inv, local_tar_pos, w_last)
 
     obs = local_tar_pos
     return obs
@@ -427,7 +441,7 @@ def compute_location_observations(root_states, tar_pos, w_last=True):
 
 @torch.jit.script
 def compute_reach_reward(reach_body_pos, tar_pos):
-    # type: (Tensor, Tensor) -> Tensor
+    # type: (Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
     pos_err_scale = 4.0
 
     pos_diff = tar_pos - reach_body_pos
@@ -436,4 +450,9 @@ def compute_reach_reward(reach_body_pos, tar_pos):
 
     reward = pos_reward
 
-    return reward
+    output_dict ={
+        "pos_err": pos_err,
+        "pos_diff": pos_diff,
+        "pos_reward": pos_reward
+    }
+    return reward, output_dict
