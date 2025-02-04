@@ -112,6 +112,7 @@ class PathGenerator:
                 if len(dtheta) > 1:
                     dtheta[1, 0] = -np.pi  # ZL: Hacking to create collision
                 speed[:] = (self.config.speed_min + self.config.speed_max) / 2
+                head_height[:] = 1.5
             ################################################
 
             if self.config.slow:
