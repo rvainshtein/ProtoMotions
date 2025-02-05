@@ -5,7 +5,7 @@ defaults:
   - /env: masked_mimic
   - /opt/disable_discriminator  # Default mimic experiments don't use the discriminator
   - /terrain/terrain_obs
-  - /terrain/complex
+  - /terrain: complex
   - /scenes/samp
   - /opt/masked_mimic/transformer
   - /opt/masked_mimic/text_conditioning

@@ -3,7 +3,7 @@
 defaults:
 #  - /robot: smpl  # Due to hack with sys.argv in importing isaacgym this can't be set to default here
 #  - /backbone: isaacgym  # Due to hack with sys.argv in importing isaacgym this can't be set to default here
-  - /terrain: flat
+  - override /terrain: flat
 
 motion_file: phys_anim/data/motions/smpl_humanoid_walk.npy
 scene_lib: null
