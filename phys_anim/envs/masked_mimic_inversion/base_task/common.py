@@ -176,7 +176,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def draw_task(self):
         return
 
-    def print_results(self, results_dict: Dict[str, str]) -> None:
+    def print_results(self, results_dict: Dict[str, Union[str, Tensor]]) -> None:
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Parameter", style="dim")
         table.add_column("Value", justify="right")

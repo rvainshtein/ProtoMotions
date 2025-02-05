@@ -152,6 +152,9 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         reach_body_pos = self.rigid_body_pos[:, self.reach_body_id, :]
         self.rew_buf[:], output_dict = compute_reach_reward(reach_body_pos, self._tar_pos)
 
+        if self.config.get("log_output", False):
+            self.print_results(output_dict)
+
         self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
         self.compute_failures_and_distances()
