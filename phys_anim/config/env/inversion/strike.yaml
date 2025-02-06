@@ -12,4 +12,5 @@ env:
       tar_dist_max: 10.0
       near_dist: 1.5
       near_prob: 0.5
+      enable_success_termination: false # Enable termination when the target is reached
       obs_size: 15

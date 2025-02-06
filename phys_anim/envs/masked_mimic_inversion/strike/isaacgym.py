@@ -25,7 +25,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 from isaac_utils import torch_utils
 from isaac_utils.rotations import quat_mul
@@ -42,6 +42,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
     def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
         super().__init__(config=config, device=device)
 
+        self.enable_success_termination = getattr(self.config.strike_params, "enable_success_termination", False)
         if not self.headless:
             self._build_marker_state_tensors()
 
@@ -121,9 +122,23 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
     def reset_actors(self, env_ids):
         super().reset_actors(env_ids)
-        self._reset_target(env_ids)
+        self._reset_strike_target(env_ids)
 
-    def _reset_target(self, env_ids=None):
+    def reset_task(self, env_ids=None):
+        if len(env_ids) > 0:
+            average_distances = self._current_accumulated_errors[env_ids] / (
+                self._last_length[env_ids]
+            )
+            self._distances.extend(average_distances.cpu().tolist())
+            self._current_accumulated_errors[env_ids] = 0
+            self._failures.extend(
+                (self._current_failures[env_ids] > 0).cpu().tolist()
+            )
+            self._current_failures[env_ids] = 0
+            self._reset_strike_target(env_ids)
+        super().reset_task(env_ids)
+
+    def _reset_strike_target(self, env_ids=None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
         root_states = self.get_humanoid_root_states()[env_ids]
@@ -181,8 +196,35 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         char_root_state = self.humanoid_root_states
         strike_body_vel = self.rigid_body_vel[..., self._strike_body_ids[0], :]
 
-        self.rew_buf[:] = compute_strike_reward(tar_pos, tar_rot, char_root_state,
-                                                self._prev_root_pos, self.dt, self.w_last)
+        self.rew_buf[:], output_dict = compute_strike_reward(tar_pos, tar_rot, char_root_state,
+                                                             self._prev_root_pos, self.dt, self.w_last)
+
+        if (
+                self.config.num_envs == 1
+                and self.config.get("log_output", False)
+                and self.progress_buf % 3 == 0
+        ):
+            output_dict.update(dict(success_rate=(self._current_failures == 0).sum()))
+            self.print_results(output_dict)
+
+        self.log_dict.update(output_dict)
+        # # need these at the end of every compute_reward function
+        self.compute_failures_and_distances()
+        self.accumulate_errors()
+
+    def compute_failures_and_distances(self):
+        tar_pos = self._target_states[..., 0:3]
+        tar_rot = self._target_states[..., 3:7]
+        up = torch.zeros_like(tar_pos)
+        up[..., -1] = 1
+        tar_up = quat_rotate(tar_rot, up, w_last=self.w_last)
+        tar_rot_err = torch.sum(up * tar_up, dim=-1)
+
+        distance_to_target = torch.norm(self.humanoid_root_states[..., 0:3] - tar_pos, dim=-1)
+
+        self._current_accumulated_errors += distance_to_target
+        self._current_failures += tar_rot_err > 0.2
+        self._last_length[:] = self.progress_buf[:]
 
     def compute_reset(self):
         bodies_positions = self.get_body_positions()
@@ -195,27 +237,30 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             bodies_positions[:, self.head_body_id, :2])
         self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(self.reset_buf, self.progress_buf,
                                                                           self.contact_forces, self.contact_body_ids,
-                                                                          self.rigid_body_pos,
-                                                                          self._tar_contact_forces,
+                                                                          self.rigid_body_pos, self._tar_contact_forces,
                                                                           self._strike_body_ids,
                                                                           self.config.max_episode_length,
-                                                                          self.config.enable_height_termination,
-                                                                          termination_heights)
+                                                            self.config.enable_height_termination,
+                                                                          termination_heights,
+                                                                          self.enable_success_termination)
 
 
-    def draw_task(self):
-        cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
 
-        self.gym.clear_lines(self.viewer)
 
-        starts = self.humanoid_root_states[..., 0:3]
-        ends = self._target_states[..., 0:3]
-        verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
 
-        for i, env_ptr in enumerate(self.envs):
-            curr_verts = verts[i]
-            curr_verts = curr_verts.reshape([1, 6])
-            self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
+def draw_task(self):
+    cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
+
+    self.gym.clear_lines(self.viewer)
+
+    starts = self.humanoid_root_states[..., 0:3]
+    ends = self._target_states[..., 0:3]
+    verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
+
+    for i, env_ptr in enumerate(self.envs):
+        curr_verts = verts[i]
+        curr_verts = curr_verts.reshape([1, 6])
+        self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
 
 
 #####################################################################
@@ -250,7 +295,7 @@ def compute_strike_observations(root_states, tar_states, w_last=True):
 
 @torch.jit.script
 def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_last=True):
-    # type: (Tensor, Tensor, Tensor, Tensor, float, bool) -> Tensor
+    # type: (Tensor, Tensor, Tensor, Tensor, float, bool) -> Tuple[Tensor, Dict[str, Tensor]]
     tar_speed = 1.0
     vel_err_scale = 4.0
 
@@ -280,19 +325,24 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_las
     succ = tar_rot_err < 0.2
     reward = torch.where(succ, torch.ones_like(reward), reward)
 
-    return reward
+    output_dict = {
+        "tar_rot_r": tar_rot_r,
+        "vel_reward": vel_reward,
+    }
+    return reward, output_dict
 
 
 @torch.jit.script
-def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_ids, rigid_body_pos,
-                           tar_contact_forces, strike_body_ids, max_episode_length,
-                           enable_early_termination, termination_heights):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor) -> Tuple[Tensor, Tensor]
+def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_ids, rigid_body_pos, tar_contact_forces,
+                           strike_body_ids, max_episode_length, enable_early_termination, termination_heights,
+                           enable_success_termination):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor, bool) -> Tuple[Tensor, Tensor]
     contact_force_threshold = 1.0
 
     terminated = torch.zeros_like(reset_buf)
+    success = torch.zeros_like(reset_buf)
 
-    if (enable_early_termination):
+    if enable_early_termination:
         masked_contact_buf = contact_buf.clone()
         masked_contact_buf[:, contact_body_ids, :] = 0
         fall_contact = torch.any(torch.abs(masked_contact_buf) > 0.1, dim=-1)
@@ -322,6 +372,14 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_id
         has_failed *= (progress_buf > 1)
         terminated = torch.where(has_failed, torch.ones_like(reset_buf), terminated)
 
-    reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), terminated)
+        # Define success condition: valid strike without unwanted contact
+        success = torch.logical_and(tar_has_contact, ~nonstrike_body_has_contact)
+        success *= (progress_buf > 1)
+
+        if not enable_success_termination:
+            success = torch.zeros_like(success)
+
+    combined_reset = success | (progress_buf >= max_episode_length - 1) | terminated
+    reset = torch.where(combined_reset.to(torch.bool), torch.ones_like(reset_buf), reset_buf)
 
     return reset, terminated
