@@ -1,7 +1,6 @@
-from typing import Optional, Tuple, Dict
-
-from isaac_utils.torch_utils import *
+from typing import Optional, Dict
 from isaac_utils import torch_utils
+from isaac_utils.torch_utils import *
 from torch import Tensor
 
 from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import MaskedMimicTaskHumanoid
@@ -22,9 +21,28 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self.jump_start = 20
         self.tar_speed = 4  # not used?
 
+        self.set_initial_root_state()
         self._prev_root_pos = torch.zeros(
             [self.num_envs, 3], device=self.device, dtype=torch.float
         )
+
+    def set_initial_root_state(self):
+        initial_humanoid_root_states = self.initial_humanoid_root_states.clone()
+        initial_humanoid_root_states[:, 7:13] = 0
+
+        initial_humanoid_root_states[..., 0] = 10
+        initial_humanoid_root_states[..., 1] = 10  # i * 2
+
+        initial_humanoid_root_states[..., 3] = 0
+        initial_humanoid_root_states[..., 4] = 0
+        initial_humanoid_root_states[..., 5] = 0
+        initial_humanoid_root_states[..., 6] = 1
+
+        self.initial_humanoid_root_states = initial_humanoid_root_states
+
+    def reset_actors(self, env_ids):
+        super().reset_actors(env_ids)
+        self.humanoid_root_states[env_ids] = self.initial_humanoid_root_states[env_ids]
 
     def draw_task(self):
         if self.first_in:
@@ -51,8 +69,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                 vertices = np.array([
                     [self.jump_start, -1.5, 0],
                     [self.jump_start, 1.5, 0],
-                    [self.goal[0], 1.5, 0],
-                    [self.goal[0], -1.5, 0]
+                    [self.goal[0].cpu().numpy(), 1.5, 0],
+                    [self.goal[0].cpu().numpy(), -1.5, 0]
                 ], dtype=np.float32)
 
                 lines = np.array([
@@ -74,19 +92,63 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         # reward = 1
         root_states = self.root_states
         self.rew_buf[:], output_dict = compute_longjump_reward(root_states,
-                                                  self._prev_root_pos,
-                                                  self.goal,
-                                                  self.jump_start,
-                                                  self.rigid_body_pos,
-                                                  self.contact_forces,
-                                                  self.contact_body_ids)
+                                                               self._prev_root_pos,
+                                                               self.goal,
+                                                               self.jump_start,
+                                                               self.rigid_body_pos,
+                                                               self.contact_forces,
+                                                               self.contact_body_ids)
 
         self._prev_root_pos[:] = root_states[:, 0:3].clone()
 
+        if (
+                self.config.num_envs == 1
+                and self.config.get("log_output", False)
+                and self.progress_buf % 3 == 0
+        ):
+            output_dict.update(dict(success_rate=(self._current_failures == 0).sum()))
+            self.print_results(output_dict)
+
         self.log_dict.update(output_dict)
         # # need these at the end of every compute_reward function
-        # self.compute_failures_and_distances()
-        # self.accumulate_errors()
+        self.compute_failures_and_distances()
+        self.accumulate_errors()
+
+    def compute_failures_and_distances(self):
+        root_states = self.root_states
+        distance_to_target = torch.norm(root_states[:, 0:3] - self.goal, dim=-1)
+
+        # jump height reward
+        x_over_40 = torch.any(self.rigid_body_pos[:, self.contact_body_ids, 0] > self.jump_start, dim=-1)  # shape 1024
+        jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
+        jump_height_reward[x_over_40] = root_states[x_over_40, 2]
+
+        # end reward for jump length
+        force_threshold = 50
+        contact_force_not_zero = torch.sqrt(
+            torch.sum(torch.sum(torch.square(self.contact_forces), dim=-1), dim=-1)) > force_threshold
+        reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
+
+        jump_length = torch.mean(self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
+                                 dim=-1) - self.jump_start
+        if len(jump_length) == 0:
+            jump_length = torch.zeros(self.num_envs, device=self.device)
+        self._current_accumulated_errors += distance_to_target
+        self._current_failures += jump_length < 1.
+        self._last_length[:] = self.progress_buf[:]
+
+    def reset_task(self, env_ids=None):
+        if len(env_ids) > 0:
+            average_distances = self._current_accumulated_errors[env_ids] / (
+                self._last_length[env_ids]
+            )
+            self._distances.extend(average_distances.cpu().tolist())
+            self._current_accumulated_errors[env_ids] = 0
+            self._failures.extend(
+                (self._current_failures[env_ids] > 0).cpu().tolist()
+            )
+            self._current_failures[env_ids] = 0
+        super().reset_task(env_ids)
 
     def compute_reset(self):
 
@@ -119,7 +181,7 @@ def compute_longjump_observations(root_states, goal, jump_start, w_last):
     return obs
 
 
-@torch.jit.script
+# @torch.jit.script
 def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_body_pos, contact_buf,
                             contact_body_ids):
     # type: (Tensor, Tensor, Tensor, int, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
@@ -175,7 +237,6 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_id
     terminated = torch.zeros_like(reset_buf)
 
     if enable_early_termination:
-
         # ------------contact_buf_list[0].shape
         # torch.Size([1024, 24, 3])
         # ----------(Pdb) rigid_body_pos_list[0].shape
