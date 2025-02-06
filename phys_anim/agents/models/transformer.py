@@ -167,10 +167,7 @@ class TransformerWithNorm(nn.Module):
             if key not in input_dict.keys():
                 continue
 
-            DEBUG = False
-            # DEBUG = True
-            if DEBUG is True:
-                print("!!!!!!! DEBUG !!!!!!!")
+            if self.config.get("disable_inversion_obs", False):
                 if key == 'inversion_obs':
                     continue
 

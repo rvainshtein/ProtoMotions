@@ -1,0 +1,4 @@
+# @package _global_
+algo:
+  config:
+    disable_inversion_obs: True
