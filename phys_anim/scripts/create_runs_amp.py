@@ -18,7 +18,7 @@ def main():
     if DEBUG:
         opts = ["small_run", "wdb", ]
     else:
-        opts = ["full_run", "wdb", "slurm_autoresume"]
+        opts = ["full_run", "wdb", "combined_callbacks"]
 
     # envs = ["direction_facing"]
     # envs = ["path_follower"]
