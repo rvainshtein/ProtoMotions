@@ -232,6 +232,7 @@ class PPO:
             self.lr_schedulers.append(self.critic_lr_scheduler)
 
     def load(self, checkpoint: Path):
+        self.checkpoint = checkpoint
         if checkpoint is not None:
             checkpoint = Path(checkpoint).resolve()
             print(f"Loading model from checkpoint: {checkpoint}")
@@ -955,6 +956,7 @@ class PPO:
         games_count = 0
         console = Console()
         console.print("[bold yellow]Evaluating policy...[/bold yellow]")
+        console.print(f"[bold purple]Checkpoint path:[/bold purple] {str(self.checkpoint)}")
 
         # Total values for steps and games, if defined.
         step_total = self.config.max_eval_steps  # May be None
