@@ -3,6 +3,6 @@
 defaults:
   - /env/masked_mimic
   - /exp/amp_inversion/base
-  - /env/inversion/steering
+  - /env/inversion/long_jump
 
-experiment_name: steering_amp_inversion
+experiment_name: long_jump_amp_inversion

@@ -12,6 +12,7 @@ env:
     # text_command = ["swinging arms up and down"]
     # text_command = ["a person walks casually"]
 
+masked_mimic_report_full_body_metrics: False
 
 eval_overrides:
   env:

@@ -3,6 +3,6 @@
 defaults:
   - /env/masked_mimic
   - /exp/amp_inversion/base
-  - /env/inversion/steering
+  - /env/inversion/strike
 
-experiment_name: steering_amp_inversion
+experiment_name: strike_amp_inversion
