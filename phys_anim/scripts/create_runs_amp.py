@@ -2,8 +2,17 @@ import os
 
 
 def main():
+    ##### PARAMETER CHANGES #####
     # DEBUG = True
     DEBUG = False
+
+    # envs = ["direction_facing"]
+    # envs = ["path_follower"]
+    # envs = ["path_follower", "steering"]
+    envs = ["reach"]
+    use_disable_discriminator = [True, False]
+    ##### PARAMETER CHANGES #####
+
     output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
     if os.path.exists(output_file_path):
         os.remove(output_file_path)
@@ -11,7 +20,7 @@ def main():
     extra_args = []
     max_epochs = 20 if DEBUG else 4000
     base_run_command += " seed=${seed}" if not DEBUG else ""
-    base_run_command += " +auto_load_latest=True" if not DEBUG else ""
+    base_run_command += " auto_load_latest=False" if DEBUG else ""
     if not DEBUG:
         extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
 
@@ -19,11 +28,6 @@ def main():
         opts = ["small_run", "wdb", ]
     else:
         opts = ["full_run", "wdb", "combined_callbacks"]
-
-    # envs = ["direction_facing"]
-    # envs = ["path_follower"]
-    envs = ["path_follower", "steering"]
-    use_disable_discriminator = [True, False]
 
     # create runs for each combination of hyperparameters
     for env in envs:

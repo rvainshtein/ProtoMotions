@@ -2,8 +2,22 @@ import os
 
 
 def main():
+    ##### PARAMETER CHANGES #####
     # DEBUG = True
     DEBUG = False
+
+    # envs = ["direction_facing"]
+    # envs = ["path_follower"]
+    # envs = ["path_follower", "direction_facing", "steering"]
+    envs = ["reach"]
+
+    use_chens_prior = [True, False]
+    use_text = [True, False]
+    use_current_pose_obs = [True, False]
+    use_bigger_model = [True, False]
+    train_actor = [True, False]
+    ##### PARAMETER CHANGES #####
+
     output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
     if os.path.exists(output_file_path):
         os.remove(output_file_path)
@@ -11,7 +25,7 @@ def main():
     extra_args = []
     max_epochs = 20 if DEBUG else 4000
     base_run_command += " seed=${seed}" if not DEBUG else ""
-    base_run_command += " auto_load_latest=True" if not DEBUG else ""
+    base_run_command += " auto_load_latest=False" if DEBUG else ""
     if not DEBUG:
         extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
 
@@ -20,48 +34,44 @@ def main():
     else:
         opts = ["full_run", "wdb", "combined_callbacks"]
 
-    # envs = ["direction_facing"]
-    # envs = ["path_follower"]
-    envs = ["path_follower", "direction_facing", "steering"]
-    use_chens_prior = [True, False]
-    use_text = [True, False]
-    use_current_pose_obs = [True, False]
-    use_bigger_model = [True, False]
-
     # create runs for each combination of hyperparameters
     for env in envs:
         for prior_flag in use_chens_prior:
             for text_flag in use_text:
                 for current_pose in use_current_pose_obs:
                     for bigger_model in use_bigger_model:
-                        current_opts = opts.copy()
-                        current_extra_args = extra_args.copy()
-                        current_run_command = ""
-                        current_run_command += base_run_command
-                        current_run_command += f' +exp=inversion/{env}'
-                        current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
+                        for train_actor_flag in train_actor:
+                            current_opts = opts.copy()
+                            current_extra_args = extra_args.copy()
+                            current_run_command = ""
+                            current_run_command += base_run_command
+                            current_run_command += f' +exp=inversion/{env}'
+                            current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
 
-                        if DEBUG:
-                            current_experiment_name += '_DEBUG'
-                            current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
-                        current_run_command += (
-                                f" experiment_name={current_experiment_name}" + "_${seed}"
-                        )
-                        current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
-                        current_extra_args += [f"env.config.use_text={text_flag}"]
-                        if current_pose:
-                            current_opts += ["masked_mimic/inversion/current_pose_obs"]
-                        if bigger_model:
-                            current_extra_args += [
-                                "algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"]
-                        opt_string = "+opt=[" + ','.join(current_opts) + "]"
-                        extra_args_string = ' '.join(current_extra_args)
-                        current_run_command = " ".join(
-                            [current_run_command, opt_string, extra_args_string, ]
-                        )
+                            if DEBUG:
+                                current_experiment_name += '_DEBUG'
+                                current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
+                            current_run_command += (
+                                    f" experiment_name={current_experiment_name}" + "_${seed}"
+                            )
+                            current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
+                            current_extra_args += [f"env.config.use_text={text_flag}"]
+                            if current_pose:
+                                current_opts += ["masked_mimic/inversion/current_pose_obs"]
+                            if bigger_model:
+                                current_extra_args += [
+                                    "algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]"]
+                            if train_actor_flag:
+                                current_opts += ["masked_mimic/inversion/train_actor"]
 
-                        with open(output_file_path, "a") as f:
-                            f.write(current_run_command + "\n")
+                            opt_string = "+opt=[" + ','.join(current_opts) + "]"
+                            extra_args_string = ' '.join(current_extra_args)
+                            current_run_command = " ".join(
+                                [current_run_command, opt_string, extra_args_string, ]
+                            )
+
+                            with open(output_file_path, "a") as f:
+                                f.write(current_run_command + "\n")
 
 
 if __name__ == "__main__":
