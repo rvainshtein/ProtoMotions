@@ -7,13 +7,14 @@
 import torch
 
 from isaac_utils import torch_utils, rotations
+from torch import Tensor
 
 from phys_anim.utils.motion_lib import MotionLib
 
 from rich.console import Console
 from rich.table import Table
 
-from typing import Optional, TYPE_CHECKING, Dict, List
+from typing import Optional, TYPE_CHECKING, Dict, List, Union
 
 if TYPE_CHECKING:
     from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
@@ -182,6 +183,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         table.add_column("Value", justify="right")
         table.add_row("Step", f"{self.progress_buf.item():.3f}")
         table.add_row("Reward", f"{self.rew_buf.item():.3f}")
+        table.add_row("Success Rate", f"{(self._current_failures == 0).sum().item():.3f}")
+
         for key, value in results_dict.items():
             # if the value is a float, format it to 3 decimal places
             if isinstance(value, float):
