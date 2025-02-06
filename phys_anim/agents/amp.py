@@ -60,7 +60,7 @@ class AMP(PPO):
 
             self.discriminator_replay_buffer = ReplayBuffer(
                 self.config.discriminator_replay_size
-            )
+            ).to(self.device)
 
             self.discriminator_grad_norm_before_clip = 0.0
             self.discriminator_grad_norm_after_clip = 0.0
