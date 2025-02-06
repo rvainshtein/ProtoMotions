@@ -12,6 +12,7 @@ scene_lib: null
 
 env:
   config:
+    mimic_early_termination: null
     mimic_reset_track:
       reset_on_episode_reset: False
       reset_episode_on_reset_track: False
@@ -32,6 +33,9 @@ experiment_name: amp_inversion
 
 algo:
   config:
+    eval_metric_keys: [ ]
+    eval_metrics_every: 20
+    max_epochs: ${eval:${training_max_steps}//${num_envs}//${.num_steps}}
     models:
       # Append the path obs to the actor and critic inputs
       extra_input_obs_size: ${env.config.task_obs_size}
