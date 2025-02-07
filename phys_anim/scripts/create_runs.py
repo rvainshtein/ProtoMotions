@@ -46,13 +46,19 @@ def main():
                             current_run_command = ""
                             current_run_command += base_run_command
                             current_run_command += f' +exp=inversion/{env}'
-                            current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}"
-
+                            current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}_train_actor_{train_actor_flag}"
+                            # add with ++ all the flags for easier filtering
+                            current_run_command += f" ++prior={prior_flag} ++text={text_flag} ++current_pose={current_pose} ++bigger={bigger_model}"
+                            if train_actor_flag:
+                                current_run_command += f" ++algo_type=MaskedMimic_Finetune"
+                            else:
+                                current_run_command += f" ++algo_type=MaskedMimic_Inversion"
                             if DEBUG:
                                 current_experiment_name += '_DEBUG'
                                 current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
                             current_run_command += (
-                                    f" experiment_name={current_experiment_name}" + "_${seed}"
+                                    f" experiment_name={current_experiment_name}" + "_${seed}" +
+                                    f" ++clean_exp_name={current_experiment_name}"
                             )
                             current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
                             current_extra_args += [f"env.config.use_text={text_flag}"]

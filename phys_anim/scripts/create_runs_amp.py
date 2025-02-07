@@ -38,12 +38,17 @@ def main():
             current_run_command += base_run_command
             current_run_command += f' +exp=amp_inversion/{env}'
             current_experiment_name = f"{env}_disable_discriminator_{disable_discriminator}"
-
+            # add with ++ all the flags for easier filtering
+            if disable_discriminator:
+                current_run_command += f" ++algo_type=PureRL"
+            else:
+                current_run_command += f" ++algo_type=AMP"
             if DEBUG:
                 current_experiment_name += '_DEBUG'
                 current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
             current_run_command += (
-                    f" experiment_name={current_experiment_name}" + "_${seed}"
+                    f" experiment_name={current_experiment_name}" + "_${seed}" +
+                    f" ++clean_exp_name={current_experiment_name}"
             )
             if disable_discriminator:
                 current_opts += ["disable_discriminator", "disable_discriminator_weights"]
