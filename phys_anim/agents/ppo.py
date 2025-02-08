@@ -26,6 +26,7 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import datetime
+import json
 
 import torch
 from rich.console import Console
@@ -1189,9 +1190,12 @@ class PPO:
         console.print(panel)
 
         if self.config.get("log_eval_results", False):
-            self.fabric.log_dict({**{f"eval/{k}": v for k, v in eval_log_dict.items()},
-                                  **{f"env/{k}": v for k, v in env_metrics.items()},
-                                  **{f"core/{k}": v for k, v in core_metrics.items()}})
+            final_eval_metrics_dict = {**{f"eval/{k}": v for k, v in eval_log_dict.items()},
+                      **{f"env/{k}": v for k, v in env_metrics.items()},
+                      **{f"core/{k}": v for k, v in core_metrics.items()}}
+            self.fabric.log_dict(final_eval_metrics_dict)
+            with open(self.fabric.loggers[0].log_dir + "/eval_metrics.json", "w") as f:
+                json.dump(final_eval_metrics_dict, f)
 
 
 def normalization_with_masks(values: Tensor, masks: Optional[Tensor]):

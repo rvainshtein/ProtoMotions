@@ -47,7 +47,7 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
     @torch.no_grad()
     def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
         self.eval()
-        results = getattr(self.env,'results')
+        results = getattr(self.env, 'results')
         if len(results) > 0:
             log_dict = results
             success_rate = results["reach_success"]

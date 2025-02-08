@@ -16,13 +16,12 @@ def main():
     gpu_ids = [0]  # List of GPU IDs to distribute runs
     more_options = ""  # Additional options for the eval script
     log_eval_results = True  # Whether to set algo.config.log_eval_results
-    opts = ['wdb']
     wandb_project = "eval_results"
+    opts = ['wdb']
 
-    # num_envs = 1024
-    # max_games = num_envs * 2
-    num_envs = 10
-    max_games = num_envs * 1
+    num_envs = 1024
+    max_games = num_envs * 2
+
     volume_configuration = f' +num_envs={num_envs} +algo.config.num_games={max_games}'
 
     gpu_cycle = cycle(gpu_ids) if len(gpu_ids) > 1 else None
