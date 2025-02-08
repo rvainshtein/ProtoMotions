@@ -73,7 +73,7 @@ def main(override_config: OmegaConf):
         checkpoint = Path(override_config.checkpoint).resolve()
         config_path = checkpoint.parent / "config.yaml"
         if not config_path.exists():
-            config_path = checkpoint.parent.parent / "config.yaml"
+            config_path = checkpoint.parent.parent.parent / "config.yaml"
             if not config_path.exists():
                 has_config = False
                 print(f"Could not find config path: {config_path}")
