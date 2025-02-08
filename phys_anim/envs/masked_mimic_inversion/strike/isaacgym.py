@@ -58,6 +58,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                    self.humanoid_handles[0],
                                                                    strike_body_names)
         self._build_target_tensors()
+        self._current_successes = torch.zeros([self.num_envs], device=self.device, dtype=torch.int32)
 
     def create_envs(self, num_envs, spacing, num_per_row):
         self._target_handles = []
@@ -132,9 +133,9 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
             self._failures.extend(
-                (self._current_failures[env_ids] > 0).cpu().tolist()
+                (self._current_successes[env_ids] == 0).cpu().tolist()
             )
-            self._current_failures[env_ids] = 0
+            self._current_successes[env_ids] = 0
             self._reset_strike_target(env_ids)
         super().reset_task(env_ids)
 
@@ -188,7 +189,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         tar_states = self._target_states[env_ids]
 
         obs = compute_strike_observations(root_states, tar_states)
-        return obs
+        self.inversion_obs[env_ids] = torch.cat([obs, self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
         tar_pos = self._target_states[..., 0:3]
@@ -204,7 +205,6 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                 and self.config.get("log_output", False)
                 and self.progress_buf % 3 == 0
         ):
-            output_dict.update(dict(success_rate=(self._current_failures == 0).sum()))
             self.print_results(output_dict)
 
         self.log_dict.update(output_dict)
@@ -223,7 +223,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         distance_to_target = torch.norm(self.humanoid_root_states[..., 0:3] - tar_pos, dim=-1)
 
         self._current_accumulated_errors += distance_to_target
-        self._current_failures += tar_rot_err > 0.2
+        self._current_successes += tar_rot_err < 0.2
         self._last_length[:] = self.progress_buf[:]
 
     def compute_reset(self):
@@ -240,12 +240,9 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           self.rigid_body_pos, self._tar_contact_forces,
                                                                           self._strike_body_ids,
                                                                           self.config.max_episode_length,
-                                                            self.config.enable_height_termination,
+                                                                          self.config.enable_height_termination,
                                                                           termination_heights,
                                                                           self.enable_success_termination)
-
-
-
 
 
 def draw_task(self):
@@ -326,6 +323,7 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_las
     reward = torch.where(succ, torch.ones_like(reward), reward)
 
     output_dict = {
+        "tar_rot_err": tar_rot_err,
         "tar_rot_r": tar_rot_r,
         "vel_reward": vel_reward,
     }
