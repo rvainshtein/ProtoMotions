@@ -1188,6 +1188,11 @@ class PPO:
         console = Console()
         console.print(panel)
 
+        if self.config.get("log_eval_results", False):
+            self.fabric.log_dict({**{f"eval/{k}": v for k, v in eval_log_dict.items()},
+                                  **{f"env/{k}": v for k, v in env_metrics.items()},
+                                  **{f"core/{k}": v for k, v in core_metrics.items()}})
+
 
 def normalization_with_masks(values: Tensor, masks: Optional[Tensor]):
     if masks is None:
