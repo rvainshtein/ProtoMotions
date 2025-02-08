@@ -218,10 +218,10 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         turned_envs = ~turning_envs
 
         tar_dir_speed = torch.sum(self._tar_dir * root_vel, dim=-1)
-        tar_speed_error = self._tar_speed - tar_dir_speed
+        tar_speed_error = (self._tar_speed - tar_dir_speed) / self._tar_speed
 
         self._current_accumulated_errors[turned_envs] += tangent_vel_error[turned_envs]
-        self._current_failures[turned_envs] += torch.abs(tar_speed_error[turned_envs]) > 0.75
+        self._current_failures[turned_envs] += torch.abs(tar_speed_error[turned_envs]) > 0.25
         self._current_failures[turning_envs] = 0
         self._current_accumulated_errors[turning_envs] = 0
         self._last_length[:] = self.progress_buf[:]
@@ -575,7 +575,8 @@ def compute_heading_reward(
     dt: The time step
     """
     # vel_err_scale = 0.25
-    vel_err_scale = 1.0
+    # vel_err_scale = 1.0
+    vel_err_scale = 10.0
     tangent_err_w = 0.1
 
     delta_root_pos = root_pos - prev_root_pos
@@ -588,13 +589,10 @@ def compute_heading_reward(
     tangent_speed = torch.sum(tangent_vel, dim=-1)
 
     tar_vel_err = tar_speed - tar_dir_speed
+    tar_vel_err_rel = tar_vel_err / tar_speed
     tangent_vel_err = tangent_speed
     dir_reward = torch.exp(
-        -vel_err_scale
-        * (
-                tar_vel_err * tar_vel_err
-                + tangent_err_w * tangent_vel_err * tangent_vel_err
-        )
+        -(vel_err_scale * tar_vel_err_rel * tar_vel_err_rel + tangent_err_w * tangent_vel_err * tangent_vel_err)
     )
 
     speed_mask = tar_dir_speed < -0.5
@@ -603,6 +601,7 @@ def compute_heading_reward(
         "tar_dir_speed": tar_dir_speed,
         "tangent_speed": tangent_speed,
         "tar_vel_err": tar_vel_err * tar_vel_err,
+        "tar_vel_err_rel": tar_vel_err_rel * tar_vel_err_rel,
         "tangent_vel_err": tangent_err_w * tangent_vel_err * tangent_vel_err,
         "dir_reward": dir_reward,
     }
