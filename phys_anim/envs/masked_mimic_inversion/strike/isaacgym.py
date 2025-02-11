@@ -54,9 +54,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         self._prev_root_pos = torch.zeros([self.num_envs, 3], device=self.device, dtype=torch.float)
 
         strike_body_names = self.config.strike_params.strike_body_names
-        self._strike_body_ids = self._build_strike_body_ids_tensor(self.envs[0],
-                                                                   self.humanoid_handles[0],
-                                                                   strike_body_names)
+        self._strike_body_ids = self.build_body_ids_tensor(strike_body_names)
         self._build_target_tensors()
         self._current_successes = torch.zeros([self.num_envs], device=self.device, dtype=torch.int32)
 
@@ -97,16 +95,16 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                               col_filter, segmentation_id)
         self._target_handles.append(target_handle)
 
-    def _build_strike_body_ids_tensor(self, env_ptr, actor_handle, body_names):
-        body_ids = []
-
-        for body_name in body_names:
-            body_id = self.gym.find_actor_rigid_body_handle(env_ptr, actor_handle, body_name)
-            assert (body_id != -1)
-            body_ids.append(body_id)
-
-        body_ids = to_torch(body_ids, device=self.device, dtype=torch.long)
-        return body_ids
+    # def _build_strike_body_ids_tensor(self, env_ptr, actor_handle, body_names):
+    #     body_ids = []
+    #
+    #     for body_name in body_names:
+    #         body_id = self.gym.find_actor_rigid_body_handle(env_ptr, actor_handle, body_name)
+    #         assert (body_id != -1)
+    #         body_ids.append(body_id)
+    #
+    #     body_ids = to_torch(body_ids, device=self.device, dtype=torch.long)
+    #     return body_ids
 
     def _build_target_tensors(self):
         num_actors = self.get_num_actors_per_env()
@@ -236,7 +234,8 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         termination_heights = self.termination_heights + self.get_ground_heights(
             bodies_positions[:, self.head_body_id, :2])
         self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(self.reset_buf, self.progress_buf,
-                                                                          self.contact_forces, self.contact_body_ids,
+                                                                          self.contact_forces,
+                                                                          self.non_termination_contact_body_ids,
                                                                           self.rigid_body_pos, self._tar_contact_forces,
                                                                           self._strike_body_ids,
                                                                           self.config.max_episode_length,
