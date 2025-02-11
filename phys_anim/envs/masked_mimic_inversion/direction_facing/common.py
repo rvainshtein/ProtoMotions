@@ -123,14 +123,14 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         if len(env_ids) > 0:
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
             active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
-                (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
+                    (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
             )
             average_distances = self._current_accumulated_errors[env_ids][
-                active_envs
-            ] / (
-                self._last_length[env_ids][active_envs]
-                - self._heading_turn_steps[env_ids][active_envs]
-            )
+                                    active_envs
+                                ] / (
+                                        self._last_length[env_ids][active_envs]
+                                        - self._heading_turn_steps[env_ids][active_envs]
+                                )
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
             self._failures.extend(
@@ -151,8 +151,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
                                      dir_delta_theta + self._tar_facing_dir_theta[env_ids] + np.pi
                              ) % (2 * np.pi) - np.pi
 
-        face_tar_dir = torch.stack([torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1
-        )
+        face_tar_dir = torch.stack([torch.cos(face_dir_theta), torch.sin(face_dir_theta)], dim=-1)
         self._tar_facing_dir[env_ids] = face_tar_dir
         self._tar_facing_dir_theta[env_ids] = face_dir_theta
 

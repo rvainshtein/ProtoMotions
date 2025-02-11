@@ -143,7 +143,7 @@ class MaskedMimicDirectionFacingHumanoid(
         self._face_marker_pos[..., 0:2] = (
             humanoid_root_pos[..., 0:2] + self._tar_facing_dir
         )
-        self._face_marker_pos[..., 2] = 0.0
+        self._face_marker_pos[..., 2] = humanoid_root_pos[..., 2]
 
         face_theta = torch.atan2(
             self._tar_facing_dir[..., 1], self._tar_facing_dir[..., 0]
