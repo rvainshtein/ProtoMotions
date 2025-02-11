@@ -9,12 +9,14 @@ def main():
     # envs = ["direction_facing"]
     # envs = ["path_follower"]
     # envs = ["path_follower", "direction_facing", "steering"]
-    envs = ["reach"]
+    # envs = ["reach"]
+    envs = ["steering", "direction_facing", "strike"]
 
     use_chens_prior = [True, False]
-    use_text = [True, False]
-    use_current_pose_obs = [True, False]
-    use_bigger_model = [True, False]
+    use_text = [False]
+    # use_text = [True, False]
+    use_current_pose_obs = [True]
+    use_bigger_model = [True]
     train_actor = [True, False]
     ##### PARAMETER CHANGES #####
 
@@ -55,7 +57,7 @@ def main():
                                 current_run_command += f" ++algo_type=MaskedMimic_Inversion"
                             if DEBUG:
                                 current_experiment_name += '_DEBUG'
-                                current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
+                            current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
                             current_run_command += (
                                     f" experiment_name={current_experiment_name}" + "_${seed}" +
                                     f" ++clean_exp_name={current_experiment_name}"

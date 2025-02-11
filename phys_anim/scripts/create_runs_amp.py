@@ -9,11 +9,12 @@ def main():
     # envs = ["direction_facing"]
     # envs = ["path_follower"]
     # envs = ["path_follower", "steering"]
-    envs = ["reach"]
+    # envs = ["reach"]
+    envs = ["steering", "direction_facing", "strike"]
     use_disable_discriminator = [True, False]
     ##### PARAMETER CHANGES #####
 
-    output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
+    output_file_path = "amp_runs.sh" if not DEBUG else "amp_debug_runs.sh"
     if os.path.exists(output_file_path):
         os.remove(output_file_path)
     base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym"
@@ -45,7 +46,7 @@ def main():
                 current_run_command += f" ++algo_type=AMP"
             if DEBUG:
                 current_experiment_name += '_DEBUG'
-                current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
+            current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
             current_run_command += (
                     f" experiment_name={current_experiment_name}" + "_${seed}" +
                     f" ++clean_exp_name={current_experiment_name}"
