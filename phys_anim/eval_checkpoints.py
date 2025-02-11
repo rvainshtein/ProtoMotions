@@ -3,7 +3,7 @@
 # We then iterate over the list of checkpoint paths and create a run command for each checkpoint path.
 # If given several GPU ids, we can distribute the checkpoints over the GPUs.
 # In the end we aggregate all results into a single file, but also provide an option to log to wandb.
-
+import glob
 import subprocess
 from itertools import cycle
 
@@ -12,7 +12,9 @@ from rich.console import Console
 
 def main():
     # Set parameters manually
-    checkpoint_paths = ["results/direction_facing_rel_speed/last.ckpt", ]  # List of checkpoint paths
+    # checkpoint_paths = ["results/direction_facing_rel_speed/last.ckpt", ]  # List of checkpoint paths
+    experiments_parent_dir = "results"
+    checkpoint_paths = glob.glob(f'{experiments_parent_dir}/*/last.ckpt', recursive=False)
     gpu_ids = [0]  # List of GPU IDs to distribute runs
     more_options = ""  # Additional options for the eval script
     log_eval_results = True  # Whether to set algo.config.log_eval_results
