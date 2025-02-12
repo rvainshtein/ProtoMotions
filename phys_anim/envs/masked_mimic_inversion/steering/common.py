@@ -589,7 +589,7 @@ def compute_heading_reward(
     tangent_speed = torch.sum(tangent_vel, dim=-1)
 
     tar_vel_err = tar_speed - tar_dir_speed
-    tar_vel_err_rel = tar_vel_err / tar_speed
+    tar_vel_err_rel = tar_vel_err / (1e-4 + tar_speed)
     tangent_vel_err = tangent_speed
     dir_reward = torch.exp(
         -(vel_err_scale * tar_vel_err_rel * tar_vel_err_rel + tangent_err_w * tangent_vel_err * tangent_vel_err)
