@@ -25,7 +25,7 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-from typing import Optional, Tuple, Dict
+from typing import Optional, Dict
 
 from isaac_utils import torch_utils
 from isaac_utils.rotations import quat_mul
@@ -56,7 +56,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         strike_body_names = self.config.strike_params.strike_body_names
         self._strike_body_ids = self.build_body_ids_tensor(strike_body_names)
         self._build_target_tensors()
-        self._current_successes = torch.zeros([self.num_envs], device=self.device, dtype=torch.int32)
+        self._current_successes = torch.zeros([self.num_envs], device=self.device, dtype=torch.bool)
 
     def create_envs(self, num_envs, spacing, num_per_row):
         self._target_handles = []
@@ -95,17 +95,6 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                               col_filter, segmentation_id)
         self._target_handles.append(target_handle)
 
-    # def _build_strike_body_ids_tensor(self, env_ptr, actor_handle, body_names):
-    #     body_ids = []
-    #
-    #     for body_name in body_names:
-    #         body_id = self.gym.find_actor_rigid_body_handle(env_ptr, actor_handle, body_name)
-    #         assert (body_id != -1)
-    #         body_ids.append(body_id)
-    #
-    #     body_ids = to_torch(body_ids, device=self.device, dtype=torch.long)
-    #     return body_ids
-
     def _build_target_tensors(self):
         num_actors = self.get_num_actors_per_env()
         self._target_states = self.root_states.view(self.num_envs, num_actors, self.root_states.shape[-1])[..., 1, :]
@@ -119,19 +108,20 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         return
 
-    def reset_actors(self, env_ids):
-        super().reset_actors(env_ids)
-        self._reset_strike_target(env_ids)
+    # def reset_actors(self, env_ids):
+    #     super().reset_actors(env_ids)
+    #     self._reset_strike_target(env_ids)
 
     def reset_task(self, env_ids=None):
         if len(env_ids) > 0:
-            average_distances = self._current_accumulated_errors[env_ids] / (
-                self._last_length[env_ids]
-            )
+            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
+            active_envs = self._last_length[env_ids] > 0
+            average_distances = (self._current_accumulated_errors[env_ids][active_envs] /
+                                 self._last_length[env_ids][active_envs])
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
             self._failures.extend(
-                (self._current_successes[env_ids] == 0).cpu().tolist()
+                (self._current_successes[env_ids][active_envs] == 0).cpu().tolist()
             )
             self._current_successes[env_ids] = 0
             self._reset_strike_target(env_ids)
@@ -140,7 +130,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
     def _reset_strike_target(self, env_ids=None):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
-        root_states = self.get_humanoid_root_states()[env_ids]
+        root_states = self.get_humanoid_root_states()
 
         n = len(env_ids)
 
@@ -243,20 +233,19 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           termination_heights,
                                                                           self.enable_success_termination)
 
+    def draw_task(self):
+        cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
 
-def draw_task(self):
-    cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
+        self.gym.clear_lines(self.viewer)
 
-    self.gym.clear_lines(self.viewer)
+        starts = self.humanoid_root_states[..., 0:3]
+        ends = self._target_states[..., 0:3]
+        verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
 
-    starts = self.humanoid_root_states[..., 0:3]
-    ends = self._target_states[..., 0:3]
-    verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
-
-    for i, env_ptr in enumerate(self.envs):
-        curr_verts = verts[i]
-        curr_verts = curr_verts.reshape([1, 6])
-        self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
+        for i, env_ptr in enumerate(self.envs):
+            curr_verts = verts[i]
+            curr_verts = curr_verts.reshape([1, 6])
+            self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
 
 
 #####################################################################
@@ -330,7 +319,8 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_las
 
 
 @torch.jit.script
-def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_ids, rigid_body_pos, tar_contact_forces,
+def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids, rigid_body_pos,
+                           tar_contact_forces,
                            strike_body_ids, max_episode_length, enable_early_termination, termination_heights,
                            enable_success_termination):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor, bool) -> Tuple[Tensor, Tensor]
@@ -341,13 +331,13 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, contact_body_id
 
     if enable_early_termination:
         masked_contact_buf = contact_buf.clone()
-        masked_contact_buf[:, contact_body_ids, :] = 0
+        masked_contact_buf[:, non_termination_contact_body_ids, :] = 0
         fall_contact = torch.any(torch.abs(masked_contact_buf) > 0.1, dim=-1)
         fall_contact = torch.any(fall_contact, dim=-1)
 
         body_height = rigid_body_pos[..., 2]
         fall_height = body_height < termination_heights
-        fall_height[:, contact_body_ids] = False
+        fall_height[:, non_termination_contact_body_ids] = False
         fall_height = torch.any(fall_height, dim=-1)
 
         has_fallen = torch.logical_and(fall_contact, fall_height)
