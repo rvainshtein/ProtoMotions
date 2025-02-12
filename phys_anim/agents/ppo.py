@@ -256,8 +256,8 @@ class PPO:
         if self.config.normalize_values:
             self.running_val_norm.load_state_dict(state_dict["running_val_norm"])
 
-        self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"])
-        self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"])
+        self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"], strict=False)
+        self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"], strict=False)
 
     def fit(self):
         self.env_reset()
