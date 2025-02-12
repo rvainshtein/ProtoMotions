@@ -243,6 +243,7 @@ class PPO:
     def load_parameters(self, state_dict):
         self.current_epoch = state_dict["epoch"]
         self.best_evaluated_score = state_dict.get("best_evaluated_score", None)
+        self.step_count = state_dict.get("step_count", 0)  # Ensure step_count is not missing
 
         self.actor.load_state_dict(state_dict["actor"])
         self.critic.load_state_dict(state_dict["critic"])
@@ -258,6 +259,9 @@ class PPO:
 
         self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"])
         self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"])
+
+        # Handle missing episode_env_tensors for older checkpoints
+        self.episode_env_tensors.load_state_dict(state_dict.get("episode_env_tensors", TensorAverageMeterDict()))
 
     def fit(self):
         self.env_reset()
@@ -743,6 +747,8 @@ class PPO:
             "episode_reward_meter": self.episode_reward_meter.state_dict(),
             "episode_length_meter": self.episode_length_meter.state_dict(),
             "best_evaluated_score": self.best_evaluated_score,
+            "step_count": self.step_count,
+            "episode_env_tensors": self.episode_env_tensors.state_dict(),
         }
         if self.config.actor_lr_scheduler is not None:
             extra_state_dict["actor_lr_scheduler"] = (
