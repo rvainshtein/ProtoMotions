@@ -59,6 +59,7 @@ for arg in sys.argv:
 
 from lightning.fabric import Fabric  # noqa: E402
 from utils.config_utils import *  # noqa: E402, F403
+from wandb.integration.lightning.fabric.logger import WandbLogger
 
 from phys_anim.agents.ppo import PPO  # noqa: E402
 
@@ -107,6 +108,13 @@ def main(override_config: OmegaConf):
 
     fabric: Fabric = instantiate(config.fabric)
     fabric.launch()
+
+    if fabric.global_rank == 0:
+        if config.algo.config.get("log_eval_results", False):
+            for logger in fabric.loggers:
+                if isinstance(logger, WandbLogger):
+                    logger.config = config  # Log Hydra configuration
+                    logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
 
     if backbone == "isaacsim":
         experience = get_experience(config.headless, False)
