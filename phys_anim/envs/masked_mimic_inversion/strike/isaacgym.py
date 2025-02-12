@@ -108,9 +108,9 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         return
 
-    # def reset_actors(self, env_ids):
-    #     super().reset_actors(env_ids)
-    #     self._reset_strike_target(env_ids)
+    def reset_actors(self, env_ids):
+        super().reset_actors(env_ids)
+        self._reset_strike_target(env_ids)
 
     def reset_task(self, env_ids=None):
         if len(env_ids) > 0:
@@ -300,8 +300,9 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_las
     root_vel = delta_root_pos / dt
     tar_dir_speed = torch.sum(tar_dir * root_vel[..., :2], dim=-1)
     tar_vel_err = tar_speed - tar_dir_speed
-    tar_vel_err = torch.clamp_min(tar_vel_err, 0.0)
-    vel_reward = torch.exp(-vel_err_scale * (tar_vel_err * tar_vel_err))
+    tar_vel_err_rel = tar_vel_err / tar_speed  # it's 1.0 always
+    tar_vel_err_rel = torch.clamp_min(tar_vel_err_rel, 0.0)
+    vel_reward = torch.exp(-vel_err_scale * (tar_vel_err_rel * tar_vel_err_rel))
     speed_mask = tar_dir_speed <= 0
     vel_reward[speed_mask] = 0
 
