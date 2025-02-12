@@ -1194,7 +1194,10 @@ class PPO:
                       **{f"env/{k}": v for k, v in env_metrics.items()},
                       **{f"core/{k}": v for k, v in core_metrics.items()}}
             self.fabric.log_dict(final_eval_metrics_dict)
-            with open(self.fabric.loggers[0].log_dir + "/eval_metrics.json", "w") as f:
+            with open(self.fabric.loggers[0].root_dir + "/eval_metrics.json", "w") as f:
+                for k, v in final_eval_metrics_dict.items():
+                    if isinstance(v, torch.Tensor):
+                        final_eval_metrics_dict[k] = v.item()
                 json.dump(final_eval_metrics_dict, f)
 
 
