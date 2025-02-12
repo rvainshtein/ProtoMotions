@@ -12,7 +12,10 @@ from rich.console import Console
 
 def main():
     # Set parameters manually
+    # PATHS
     # checkpoint_paths = ["results/direction_facing_rel_speed/last.ckpt", ]  # List of checkpoint paths
+    # checkpoint_paths = ["results/strike/last.ckpt", ]  # List of checkpoint paths
+    # DIRS
     experiments_parent_dir = "results"
     checkpoint_paths = glob.glob(f'{experiments_parent_dir}/*/last.ckpt', recursive=False)
     gpu_ids = [0]  # List of GPU IDs to distribute runs
@@ -41,11 +44,11 @@ def main():
             cmd += " ++algo.config.log_eval_results=True"
 
         console = Console()
-        console.print(f"[bold blue]Running:[/bold blue] [italic]{cmd}[/italic]")
-
         if gpu_cycle:
+            console.print(f"[bold blue]Running:[/bold blue] [italic]{cmd}[/italic]")
             processes.append(subprocess.Popen(cmd, shell=True))
         else:
+            console.print(f"[bold blue]Running:[/bold blue] [italic]{cmd}[/italic]")
             subprocess.run(cmd, shell=True)
 
     for p in processes:
