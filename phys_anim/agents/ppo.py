@@ -257,11 +257,11 @@ class PPO:
         if self.config.normalize_values:
             self.running_val_norm.load_state_dict(state_dict["running_val_norm"])
 
-        self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"])
-        self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"])
+        self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"], strict=False)
+        self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"], strict=False)
 
         # Handle missing episode_env_tensors for older checkpoints
-        self.episode_env_tensors.load_state_dict(state_dict.get("episode_env_tensors", TensorAverageMeterDict()))
+        self.episode_env_tensors.load_state_dict(state_dict.get("episode_env_tensors", {}))
 
     def fit(self):
         self.env_reset()
@@ -1197,8 +1197,8 @@ class PPO:
 
         if self.config.get("log_eval_results", False):
             final_eval_metrics_dict = {**{f"eval/{k}": v for k, v in eval_log_dict.items()},
-                      **{f"env/{k}": v for k, v in env_metrics.items()},
-                      **{f"core/{k}": v for k, v in core_metrics.items()}}
+                                       **{f"env/{k}": v for k, v in env_metrics.items()},
+                                       **{f"core/{k}": v for k, v in core_metrics.items()}}
             self.fabric.log_dict(final_eval_metrics_dict)
             with open(self.fabric.loggers[0].root_dir + "/eval_metrics.json", "w") as f:
                 for k, v in final_eval_metrics_dict.items():
