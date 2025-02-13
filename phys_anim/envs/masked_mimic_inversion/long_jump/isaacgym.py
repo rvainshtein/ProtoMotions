@@ -167,7 +167,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
             self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, 0],
             dim=-1) - self.jump_start
         self._current_accumulated_errors += distance_to_target
-        self._current_successes += jump_length > 0.5
+        self._current_successes = jump_length > 1.5
         self._last_length[:] = self.progress_buf[:]
 
     def reset_task(self, env_ids=None):
