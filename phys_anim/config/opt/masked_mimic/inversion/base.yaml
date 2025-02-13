@@ -60,6 +60,7 @@ algo:
 
 env:
   config:
+    state_init: Default
     enable_height_termination: True
     mimic_reset_track:
       reset_on_episode_reset: False
