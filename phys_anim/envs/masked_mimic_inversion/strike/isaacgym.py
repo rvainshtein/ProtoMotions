@@ -50,7 +50,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         self._tar_dist_max = self.config.strike_params.tar_dist_max
         self._near_dist = self.config.strike_params.near_dist
         self._near_prob = self.config.strike_params.near_prob
-
+        self._tar_speed = self.config.strike_params.get("tar_speed", 1.0)
         self._prev_root_pos = torch.zeros([self.num_envs, 3], device=self.device, dtype=torch.float)
 
         strike_body_names = self.config.strike_params.strike_body_names
@@ -185,8 +185,13 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         char_root_state = self.humanoid_root_states
         strike_body_vel = self.rigid_body_vel[..., self._strike_body_ids[0], :]
 
-        self.rew_buf[:], output_dict = compute_strike_reward(tar_pos, tar_rot, char_root_state,
-                                                             self._prev_root_pos, self.dt, self.w_last)
+        self.rew_buf[:], output_dict = compute_strike_reward(tar_pos,
+                                                             tar_rot,
+                                                             char_root_state,
+                                                             self._prev_root_pos,
+                                                             self.dt,
+                                                             self._tar_speed,
+                                                             self.w_last)
 
         if (
                 self.config.num_envs == 1
@@ -279,9 +284,10 @@ def compute_strike_observations(root_states, tar_states, w_last=True):
 
 
 @torch.jit.script
-def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, w_last=True):
-    # type: (Tensor, Tensor, Tensor, Tensor, float, bool) -> Tuple[Tensor, Dict[str, Tensor]]
-    tar_speed = 1.0
+def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, tar_speed, w_last=True):
+    # type: (Tensor, Tensor, Tensor, Tensor, float, float, bool) -> Tuple[Tensor, Dict[str, Tensor]]
+    # tar_speed = 1.0
+    # tar_speed = 2.0
     vel_err_scale = 4.0
 
     tar_rot_w = 0.6
