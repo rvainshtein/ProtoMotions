@@ -169,6 +169,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
     def mask_everything(self):
         # By Default mask everything out. Individual tasks will override this.
+        self.historical_pose_obs_mask[:] = False  # for some reason the initialization contains it? maybe only in inference?
+        self.target_pose_joints[:] = False
         self.masked_mimic_target_poses_masks[:] = False
         self.masked_mimic_target_bodies_masks[:] = False
         self.target_pose_obs_mask[:] = False
