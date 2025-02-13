@@ -563,12 +563,15 @@ class BaseMimic(MimicHumanoid):  # type: ignore[misc]
         if self.config.mimic_reset_track.reset_on_episode_reset:
             self.reset_track(env_ids)
 
-        self.reset_ref_state_init(
-            env_ids,
-            motion_ids=self.motion_ids[env_ids],
-            motion_times=self.motion_times[env_ids],
-            scene_ids=self.scene_ids[env_ids],
-        )
+        if self.state_init == self.StateInit.Default:
+            self.reset_default(env_ids)
+        else:
+            self.reset_ref_state_init(
+                env_ids,
+                motion_ids=self.motion_ids[env_ids],
+                motion_times=self.motion_times[env_ids],
+                scene_ids=self.scene_ids[env_ids],
+            )
 
     def get_envs_respawn_position(
         self,

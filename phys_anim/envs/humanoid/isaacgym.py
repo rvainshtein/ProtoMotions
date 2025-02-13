@@ -126,7 +126,7 @@ class Humanoid(BaseHumanoid, GymBaseInterface):  # type: ignore[misc]
         ]
 
         self.initial_dof_pos = self.dof_pos.clone()
-        self.initial_dof_vel = self.dof_vel.clone()
+        self.initial_dof_vel = self.dof_vel.clone() * 0.0
 
         if self.total_num_objects == 0:
             self.rigid_body_state: Tensor = gymtorch.wrap_tensor(rigid_body_state)
@@ -149,8 +149,8 @@ class Humanoid(BaseHumanoid, GymBaseInterface):  # type: ignore[misc]
 
         self.initial_rigid_body_pos = self.rigid_body_pos.clone()
         self.initial_rigid_body_rot = self.rigid_body_rot.clone()
-        self.initial_rigid_body_vel = self.rigid_body_vel.clone()
-        self.initial_rigid_body_ang_vel = self.rigid_body_ang_vel.clone()
+        self.initial_rigid_body_vel = self.rigid_body_vel.clone() * 0.0
+        self.initial_rigid_body_ang_vel = self.rigid_body_ang_vel.clone() * 0.0
 
         contact_force_tensor = gymtorch.wrap_tensor(contact_force_tensor)
         force_tensor = gymtorch.wrap_tensor(force_tensor)
@@ -1145,8 +1145,8 @@ class Humanoid(BaseHumanoid, GymBaseInterface):  # type: ignore[misc]
         # Reset all humanoid states to default zero-state
         root_pos = self.initial_humanoid_root_states[env_ids, 0:3].clone()
         root_rot = self.initial_humanoid_root_states[env_ids, 3:7].clone()
-        root_vel = self.initial_humanoid_root_states[env_ids, 7:10].clone()
-        root_ang_vel = self.initial_humanoid_root_states[env_ids, 10:13].clone()
+        root_vel = self.initial_humanoid_root_states[env_ids, 7:10].clone() * 0.0
+        root_ang_vel = self.initial_humanoid_root_states[env_ids, 10:13].clone() * 0.0
         dof_pos = self.initial_dof_pos[env_ids].clone()
         dof_vel = self.initial_dof_vel[env_ids].clone()
         rb_pos = self.initial_rigid_body_pos[env_ids].clone()
