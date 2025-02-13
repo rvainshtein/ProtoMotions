@@ -18,17 +18,19 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self._near_dist = self.config.long_jump_params.near_dist
         self._near_prob = self.config.long_jump_params.near_prob
         self.first_in = True
+        self._init_dist_from_start = self.config.long_jump_params.get("init_dist_from_start", 10)
+        self._jump_start = self.config.long_jump_params.get("jump_start", 20)
 
         # self.y_corridor_center = self.root_states[0, 1].clone()
         self.y_corridor_center = 50
         self.goal = torch.tensor([30, self.y_corridor_center, 1]).to(self.device)
-        self.jump_start = 20
         self.tar_speed = 4  # not used?
 
         self.set_initial_root_state()
         self._prev_root_pos = torch.zeros(
             [self.num_envs, 3], device=self.device, dtype=torch.float
         )
+        self._jump_length = torch.zeros(self.num_envs, device=self.device)
 
         self._current_successes = torch.zeros(self.num_envs, device=self.device)
 
@@ -39,7 +41,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         initial_humanoid_root_states[:, 7:13] = 0
 
         # Set valid humanoid position
-        initial_humanoid_root_states[..., 0] = 10  # X position (prevent triggering x_over_40)
+        initial_humanoid_root_states[..., 0] = min(self._jump_start - self._init_dist_from_start, 5)  # X position (prevent triggering x_over_40)
         initial_humanoid_root_states[..., 1] = self.y_corridor_center  # Y position (prevent triggering body_out)
         initial_humanoid_root_states[..., 2] = 1  # Z position (above termination height)
 
@@ -87,8 +89,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                 vertices = np.array([
                     [0, -0.5, 0],
                     [0, 0.5, 0],
-                    [self.jump_start, 0.5, 0],
-                    [self.jump_start, -0.5, 0]
+                    [self._jump_start, 0.5, 0],
+                    [self._jump_start, -0.5, 0]
                 ], dtype=np.float32)
 
                 lines = np.array([
@@ -101,8 +103,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                     self.gym.add_lines(self.viewer, env_ptr, 1, line, cols)
 
                 vertices = np.array([
-                    [self.jump_start, -1.5, 0],
-                    [self.jump_start, 1.5, 0],
+                    [self._jump_start, -1.5, 0],
+                    [self._jump_start, 1.5, 0],
                     [self.goal[0].cpu().numpy(), 1.5, 0],
                     [self.goal[0].cpu().numpy(), -1.5, 0]
                 ], dtype=np.float32)
@@ -119,7 +121,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
         root_states = self.get_humanoid_root_states()
-        obs = compute_longjump_observations(root_states, self.goal, self.jump_start, self.w_last)
+        obs = compute_longjump_observations(root_states, self.goal, self._jump_start, self.w_last)
         self.inversion_obs[env_ids] = torch.cat([obs, self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
@@ -128,7 +130,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self.rew_buf[:], output_dict = compute_longjump_reward(root_states,
                                                                self._prev_root_pos,
                                                                self.goal,
-                                                               self.jump_start,
+                                                               self._jump_start,
                                                                self.rigid_body_pos,
                                                                self.contact_forces,
                                                                self.contact_body_ids)
@@ -152,7 +154,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         distance_to_target = torch.norm(root_states[:, 0:3] - self.goal, dim=-1)
 
         # jump height reward
-        x_over_40 = torch.any(self.rigid_body_pos[:, self.contact_body_ids, 0] > self.jump_start, dim=-1)  # shape 1024
+        x_over_40 = torch.any(self.rigid_body_pos[:, self.contact_body_ids, 0] > self._jump_start, dim=-1)  # shape 1024
         jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
         jump_height_reward[x_over_40] = root_states[x_over_40, 2]
 
@@ -162,12 +164,11 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
             torch.sum(torch.sum(torch.square(self.contact_forces), dim=-1), dim=-1)) > force_threshold
         reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
 
-        jump_length = torch.zeros(self.num_envs, device=self.device)
-        jump_length[reset_x_over_40_and_contact_force_not_zero] = torch.mean(
+        self._jump_length[reset_x_over_40_and_contact_force_not_zero] = torch.mean(
             self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, 0],
-            dim=-1) - self.jump_start
-        self._current_accumulated_errors += distance_to_target
-        self._current_successes = jump_length > 1.5
+            dim=-1) - self._jump_start
+        self._current_accumulated_errors[:] += distance_to_target
+        self._current_successes[:] = self._jump_length > 1.5
         self._last_length[:] = self.progress_buf[:]
 
     def reset_task(self, env_ids=None):
@@ -181,6 +182,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                 (self._current_successes[env_ids] == 0).cpu().tolist()
             )
             self._current_successes[env_ids] = 0
+            self._jump_length[env_ids] = 0
             # self.y_corridor_center = self.root_states[env_ids, 1].clone()
         super().reset_task(env_ids)
 
@@ -194,7 +196,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                                                                           self.config.max_episode_length,
                                                                           self.config.enable_height_termination,
                                                                           self.termination_heights,
-                                                                          self.jump_start,
+                                                                          self._jump_start,
                                                                           self.y_corridor_center)
 
 
