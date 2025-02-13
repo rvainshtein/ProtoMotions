@@ -35,8 +35,8 @@ class AverageMeter(nn.Module):
     def __init__(self, in_shape, max_size):
         super(AverageMeter, self).__init__()
         self.max_size = max_size
-        self.current_size = 0
         self.register_buffer("mean", torch.zeros(in_shape, dtype=torch.float32))
+        self.register_buffer("current_size", torch.tensor(0, dtype=torch.int64))  # Ensure it is saved
 
     def update(self, values):
         size = values.size()[0]
@@ -44,17 +44,17 @@ class AverageMeter(nn.Module):
             return
         new_mean = torch.mean(values.float(), dim=0)
         size = np.clip(size, 0, self.max_size)
-        old_size = min(self.max_size - size, self.current_size)
+        old_size = min(self.max_size - size, self.current_size.item())  # Convert tensor to int
         size_sum = old_size + size
-        self.current_size = size_sum
+        self.current_size.fill_(size_sum)  # Update as tensor
         self.mean = (self.mean * old_size + new_mean * size) / size_sum
 
     def clear(self):
-        self.current_size = 0
+        self.current_size.fill_(0)
         self.mean.fill_(0)
 
     def __len__(self):
-        return self.current_size
+        return self.current_size.item()
 
     def get_mean(self):
         return self.mean.squeeze(0).cpu().numpy()
@@ -71,19 +71,19 @@ class TensorAverageMeter:
 
     def mean(self):
         if len(self.tensors) == 0:
-            return 0
+            return torch.tensor(0.0)
         cat = torch.cat(self.tensors, dim=0)
         if cat.numel() == 0:
-            return 0
+            return torch.tensor(0.0)
         else:
             return cat.mean()
 
     def std(self):
         if len(self.tensors) == 0:
-            return 0
+            return torch.tensor(0.0)
         cat = torch.cat(self.tensors, dim=0)
         if cat.numel() == 0:
-            return 0
+            return torch.tensor(0.0)
         else:
             return cat.std()
 
@@ -94,6 +94,14 @@ class TensorAverageMeter:
         mean = self.mean()
         self.clear()
         return mean
+
+    def state_dict(self):
+        """Save the list of tensors as a single stacked tensor."""
+        return {"tensors": torch.stack(self.tensors) if self.tensors else torch.empty(0)}
+
+    def load_state_dict(self, state_dict):
+        """Load state with backward compatibility (support empty tensors)."""
+        self.tensors = list(state_dict.get("tensors", torch.empty(0)).unbind())
 
 
 class TensorAverageMeterDict:
@@ -120,3 +128,14 @@ class TensorAverageMeterDict:
         output = self.compute()
         self.clear()
         return output
+
+    def state_dict(self):
+        """Save all TensorAverageMeter objects as a dictionary."""
+        return {k: v.state_dict() for k, v in self.data.items()}
+
+    def load_state_dict(self, state_dict):
+        """Load state with backward compatibility."""
+        for k, v in state_dict.items():
+            if k not in self.data:
+                self.data[k] = TensorAverageMeter()
+            self.data[k].load_state_dict(v)
