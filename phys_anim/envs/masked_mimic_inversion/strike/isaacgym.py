@@ -211,7 +211,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         distance_to_target = torch.norm(self.humanoid_root_states[..., 0:3] - tar_pos, dim=-1)
 
         self._current_accumulated_errors += distance_to_target
-        self._current_successes += tar_rot_err < 0.2
+        self._current_successes = tar_rot_err < 0.2
         self._last_length[:] = self.progress_buf[:]
 
     def compute_reset(self):
