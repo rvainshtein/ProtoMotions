@@ -565,6 +565,7 @@ class BaseMimic(MimicHumanoid):  # type: ignore[misc]
 
         if self.state_init == self.StateInit.Default:
             self.reset_default(env_ids)
+            self.reset_ref_env_ids = env_ids
         else:
             self.reset_ref_state_init(
                 env_ids,
