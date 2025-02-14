@@ -904,7 +904,15 @@ class PPO:
 
     @torch.no_grad()
     def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
-        return {}, None
+        self.eval()
+        results = getattr(self.env, 'results')
+        if len(results) > 0:
+            log_dict = results
+            success_rate = results["reach_success"]
+        else:
+            log_dict = {}
+            success_rate = None
+        return log_dict, success_rate
 
     def post_epoch_logging(self, training_log_dict: Dict):
         end_time = time.time()
@@ -1200,7 +1208,7 @@ class PPO:
                                        **{f"env/{k}": v for k, v in env_metrics.items()},
                                        **{f"core/{k}": v for k, v in core_metrics.items()}}
             self.fabric.log_dict(final_eval_metrics_dict)
-            with open(self.fabric.loggers[0].root_dir + "/eval_metrics.json", "w") as f:
+            with open(Path(self.checkpoint).parent / "eval_metrics.json", "w") as f:
                 for k, v in final_eval_metrics_dict.items():
                     if isinstance(v, torch.Tensor):
                         final_eval_metrics_dict[k] = v.item()
