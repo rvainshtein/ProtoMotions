@@ -78,18 +78,17 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         # root_pos += self.get_envs_respawn_position(env_ids)
 
         self.set_env_state(
-            env_ids=env_ids,
-            root_pos=self.initial_humanoid_root_states[env_ids, 0:3],
-            root_rot=self.initial_humanoid_root_states[env_ids, 3:7],
-            dof_pos=ref_state.dof_pos,
-            root_vel=ref_state.root_vel,
-            root_ang_vel=ref_state.root_ang_vel,
-            dof_vel=ref_state.dof_vel,
-            rb_pos=self.initial_rigid_body_pos[env_ids],
-            # rb_pos=ref_state.rb_pos,
-            rb_rot=ref_state.rb_rot,
-            rb_vel=ref_state.rb_vel,
-            rb_ang_vel=ref_state.rb_ang_vel,
+            env_ids,
+            root_pos,
+            root_rot,
+            dof_pos,
+            root_vel,
+            root_ang_vel,
+            dof_vel,
+            rb_pos,
+            rb_rot,
+            rb_vel,
+            rb_ang_vel,
         )
 
     def draw_task(self):
@@ -145,7 +144,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                                                                self._jump_start,
                                                                self.rigid_body_pos,
                                                                self.contact_forces,
-                                                               self.contact_body_ids)
+                                                               self.non_termination_contact_body_ids)
 
         self._prev_root_pos[:] = root_states[:, 0:3].clone()
 
@@ -231,9 +230,9 @@ def compute_longjump_observations(root_states, goal, jump_start, w_last):
     return obs
 
 
-# @torch.jit.script
+@torch.jit.script
 def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_body_pos, contact_buf,
-                            contact_body_ids):
+                            non_termination_contact_body_ids):
     # type: (Tensor, Tensor, Tensor, int, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
     root_pos = root_states[:, 0:3]
     prev_dist = torch.norm(prev_root_pos - goal, dim=-1)
@@ -244,7 +243,7 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
     vel_reward = root_states[:, 7]
 
     # jump height reward
-    x_over_40 = torch.any(rigid_body_pos[:, contact_body_ids, 0] > jump_start, dim=-1)  # shape 1024
+    x_over_40 = torch.any(rigid_body_pos[:, non_termination_contact_body_ids, 0] > jump_start, dim=-1)  # shape 1024
     jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
     jump_height_reward[x_over_40] = root_states[x_over_40, 2]
 
@@ -258,8 +257,7 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
     jump_length = torch.mean(rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
                              dim=-1) - jump_start
 
-    jump_length_reward[reset_x_over_40_and_contact_force_not_zero] = torch.mean(
-        rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0], dim=-1) - jump_start
+    jump_length_reward[reset_x_over_40_and_contact_force_not_zero] = jump_length
 
     # parameters
     closer_target_r *= 1
@@ -274,13 +272,14 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
         "vel_reward": vel_reward,
         "jump_height_reward": jump_height_reward,
         "jump_length_reward": jump_length_reward,
-        "jump_length": jump_length,
+        # can't return variable length
+        "jump_length": torch.where(jump_length > 0, jump_length, torch.zeros_like(jump_length)),
         "x_pos": root_pos[:, 0],
     }
     return reward, output_dict
 
 
-# @torch.jit.script
+@torch.jit.script
 def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids, rigid_body_pos,
                            max_episode_length, enable_early_termination, termination_heights, jump_start,
                            y_corridor_center):
