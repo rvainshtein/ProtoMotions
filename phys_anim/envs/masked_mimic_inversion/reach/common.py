@@ -56,10 +56,6 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
             [self.num_envs, 3], device=self.device, dtype=torch.float
         )
 
-        self._last_failures = torch.zeros(
-            [self.num_envs], device=self.device, dtype=torch.bool
-        )
-
     ###############################################################
     # Handle resets
     ###############################################################
@@ -76,7 +72,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         if len(env_ids) > 0:
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
             active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
-                ~self._last_failures[env_ids]
+                    (self._last_length[env_ids] - self._tar_reach_steps[env_ids]) > 0
             )
             average_distances = self._current_accumulated_errors[env_ids][
                                     active_envs
@@ -89,7 +85,6 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
             self._failures.extend(
                 (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
             )
-            self._last_failures[env_ids] = self._current_failures[env_ids] > 0
             self._current_failures[env_ids] = 0
 
         super().reset_task(env_ids)
@@ -152,7 +147,11 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         reach_body_pos = self.rigid_body_pos[:, self.reach_body_id, :]
         self.rew_buf[:], output_dict = compute_reach_reward(reach_body_pos, self._tar_pos)
 
-        if self.config.get("log_output", False):
+        if (
+                self.config.num_envs == 1
+                and self.config.get("log_output", False)
+                and self.progress_buf % 3 == 0
+        ):
             self.print_results(output_dict)
 
         self.log_dict.update(output_dict)
@@ -173,7 +172,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
             measurement_started
         ]
         self._current_failures[measurement_started] += (
-                distance_to_target[measurement_started] > 0.5
+                distance_to_target[measurement_started] > 0.2
         )
         self._current_failures[measurement_not_started] = 0
         self._current_accumulated_errors[measurement_not_started] = 0
@@ -453,7 +452,7 @@ def compute_reach_reward(reach_body_pos, tar_pos):
 
     reward = pos_reward
 
-    output_dict ={
+    output_dict = {
         "pos_err": pos_err,
         "pos_diff": pos_diff,
         "pos_reward": pos_reward

@@ -80,13 +80,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def accumulate_errors(self):
         self.last_unscaled_rewards = self.log_dict
 
-        if len(self._failures) > 0:
-            self.results["reach_success"] = 1.0 - sum(self._failures) / len(
-                self._failures
-            )
-            self.results["reach_distance"] = sum(self._distances) / len(
-                self._distances
-            )
+        self.results["reach_success"] = 1.0 - torch.Tensor(self._failures).mean()
+        self.results["reach_distance"] = torch.Tensor(self._distances).mean()
 
     def compute_failures_and_distances(self):
         # need to implement this in each env
