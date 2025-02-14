@@ -41,7 +41,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         initial_humanoid_root_states[:, 7:13] = 0
 
         # Set valid humanoid position
-        initial_humanoid_root_states[..., 0] = min(self._jump_start - self._init_dist_from_start, 5)  # X position (prevent triggering x_over_40)
+        initial_humanoid_root_states[..., 0] = max(self._jump_start - self._init_dist_from_start,
+                                                   5)  # X position (prevent triggering x_over_40)
         initial_humanoid_root_states[..., 1] = self.y_corridor_center  # Y position (prevent triggering body_out)
         initial_humanoid_root_states[..., 2] = 1  # Z position (above termination height)
 
@@ -61,9 +62,20 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
     # TODO: check if this is correct
     def reset_actors(self, env_ids):
         super().reset_actors(env_ids)
-        motion_ids = torch.zeros(len(env_ids), device=self.device, dtype=torch.int32)
-        motion_times = torch.zeros(len(env_ids), device=self.device, dtype=torch.float32)
-        ref_state = self.motion_lib.get_motion_state(motion_ids, motion_times)
+        # Taken from the original reset_default
+        root_pos = self.initial_humanoid_root_states[env_ids, 0:3].clone()
+        root_rot = self.initial_humanoid_root_states[env_ids, 3:7].clone()
+        root_vel = self.initial_humanoid_root_states[env_ids, 7:10].clone() * 0.0
+        root_ang_vel = self.initial_humanoid_root_states[env_ids, 10:13].clone() * 0.0
+        dof_pos = self.initial_dof_pos[env_ids].clone()
+        dof_vel = self.initial_dof_vel[env_ids].clone()
+        rb_pos = self.initial_rigid_body_pos[env_ids].clone()
+        rb_rot = self.initial_rigid_body_rot[env_ids].clone()
+        rb_vel = self.initial_rigid_body_vel[env_ids].clone()
+        rb_ang_vel = self.initial_rigid_body_ang_vel[env_ids].clone()
+
+        # Adjust root position
+        # root_pos += self.get_envs_respawn_position(env_ids)
 
         self.set_env_state(
             env_ids=env_ids,
@@ -154,7 +166,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         distance_to_target = torch.norm(root_states[:, 0:3] - self.goal, dim=-1)
 
         # jump height reward
-        x_over_40 = torch.any(self.rigid_body_pos[:, self.contact_body_ids, 0] > self._jump_start, dim=-1)  # shape 1024
+        x_over_40 = torch.any(self.rigid_body_pos[:, self.non_termination_contact_body_ids, 0] > self._jump_start,
+                              dim=-1)  # shape 1024
         jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
         jump_height_reward[x_over_40] = root_states[x_over_40, 2]
 
