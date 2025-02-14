@@ -1,38 +1,51 @@
 import os
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from dataclasses import dataclass, field
+from typing import List
 
 
-def main():
-    ##### PARAMETER CHANGES #####
-    # DEBUG = True
-    DEBUG = False
+@dataclass
+class RunConfig:
+    debug: bool = False
+    envs: List[str] = field(default_factory=lambda: ["steering", "direction_facing", "strike"])
+    use_disable_discriminator: List[bool] = field(default_factory=lambda: [True, False])
 
-    # envs = ["direction_facing"]
-    # envs = ["path_follower"]
-    # envs = ["path_follower", "steering"]
-    # envs = ["reach"]
-    envs = ["steering", "direction_facing", "strike"]
-    use_disable_discriminator = [True, False]
-    ##### PARAMETER CHANGES #####
 
-    output_file_path = "amp_runs.sh" if not DEBUG else "amp_debug_runs.sh"
+@dataclass
+class WandbConfig:
+    entity: str = "phys_inversion"
+    project: str = "chens_runs"
+
+
+@dataclass
+class Config:
+    training: RunConfig = RunConfig()
+    wandb: WandbConfig = WandbConfig()
+
+
+@hydra.main(version_base=None, config_path=None, config_name=None)
+def main(cfg: DictConfig):
+    cfg = OmegaConf.merge(OmegaConf.structured(Config()), cfg)
+    debug = cfg.training.debug
+    output_file_path = "amp_runs.sh" if not debug else "amp_debug_runs.sh"
+
     if os.path.exists(output_file_path):
         os.remove(output_file_path)
     base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym"
     extra_args = []
-    max_epochs = 20 if DEBUG else 4000
-    base_run_command += " seed=${seed}" if not DEBUG else ""
-    base_run_command += " auto_load_latest=False" if DEBUG else ""
-    if not DEBUG:
-        extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
+    max_epochs = 20 if debug else 4000
 
-    if DEBUG:
-        opts = ["small_run", "wdb", ]
+    if not debug:
+        base_run_command += " seed=${seed}"
+        extra_args += [f"wandb.wandb_entity={cfg.wandb.entity} wandb.wandb_project={cfg.wandb.project}"]
     else:
-        opts = ["full_run", "wdb", "combined_callbacks"]
+        base_run_command += " auto_load_latest=False"
 
-    # create runs for each combination of hyperparameters
-    for env in envs:
-        for disable_discriminator in use_disable_discriminator:
+    opts = ["small_run", "wdb"] if debug else ["full_run", "wdb", "combined_callbacks"]
+
+    for env in cfg.training.envs:
+        for disable_discriminator in cfg.training.use_disable_discriminator:
             current_opts = opts.copy()
             current_extra_args = extra_args.copy()
             current_run_command = ""
@@ -44,13 +57,16 @@ def main():
                 current_run_command += f" ++algo_type=PureRL"
             else:
                 current_run_command += f" ++algo_type=AMP"
-            if DEBUG:
+
+            if debug:
                 current_experiment_name += '_DEBUG'
+
             current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
             current_run_command += (
                     f" experiment_name={current_experiment_name}" + "_${seed}" +
                     f" ++clean_exp_name={current_experiment_name}"
             )
+
             if disable_discriminator:
                 current_opts += ["disable_discriminator", "disable_discriminator_weights"]
 
