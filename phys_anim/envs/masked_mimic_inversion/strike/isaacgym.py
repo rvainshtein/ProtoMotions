@@ -41,8 +41,6 @@ from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
 class MaskedMimicStrike(MaskedMimicTaskHumanoid):
     def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
         super().__init__(config=config, device=device)
-
-        self.enable_success_termination = getattr(self.config.strike_params, "enable_success_termination", False)
         if not self.headless:
             self._build_marker_state_tensors()
 
@@ -215,8 +213,8 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         distance_to_target = torch.norm(self.humanoid_root_states[..., 0:3] - tar_pos, dim=-1)
 
-        self._current_accumulated_errors += distance_to_target
-        self._current_successes = tar_rot_err < 0.2
+        self._current_accumulated_errors[:] += distance_to_target
+        self._current_successes[:] = tar_rot_err < 0.2
         self._last_length[:] = self.progress_buf[:]
 
     def compute_reset(self):
@@ -334,7 +332,6 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination
     contact_force_threshold = 1.0
 
     terminated = torch.zeros_like(reset_buf)
-    success = torch.zeros_like(reset_buf)
 
     if enable_early_termination:
         masked_contact_buf = contact_buf.clone()
@@ -366,14 +363,6 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination
         has_failed *= (progress_buf > 1)
         terminated = torch.where(has_failed, torch.ones_like(reset_buf), terminated)
 
-        # Define success condition: valid strike without unwanted contact
-        success = torch.logical_and(tar_has_contact, ~nonstrike_body_has_contact)
-        success *= (progress_buf > 1)
-
-        if not enable_success_termination:
-            success = torch.zeros_like(success)
-
-    combined_reset = success | (progress_buf >= max_episode_length - 1) | terminated
-    reset = torch.where(combined_reset.to(torch.bool), torch.ones_like(reset_buf), reset_buf)
+    reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), terminated)
 
     return reset, terminated
