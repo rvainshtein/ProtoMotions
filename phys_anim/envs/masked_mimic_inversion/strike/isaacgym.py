@@ -233,9 +233,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           self._strike_body_ids,
                                                                           self.config.max_episode_length,
                                                                           self.config.enable_height_termination,
-                                                                          termination_heights,
-                                                                          self.enable_success_termination)
-
+                                                                          termination_heights,)
     def draw_task(self):
         cols = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)
 
@@ -326,9 +324,8 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, tar_s
 @torch.jit.script
 def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids, rigid_body_pos,
                            tar_contact_forces,
-                           strike_body_ids, max_episode_length, enable_early_termination, termination_heights,
-                           enable_success_termination):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor, bool) -> Tuple[Tensor, Tensor]
+                           strike_body_ids, max_episode_length, enable_early_termination, termination_heights):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor) -> Tuple[Tensor, Tensor]
     contact_force_threshold = 1.0
 
     terminated = torch.zeros_like(reset_buf)
