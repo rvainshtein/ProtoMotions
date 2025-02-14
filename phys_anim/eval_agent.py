@@ -69,15 +69,7 @@ def main(override_config: OmegaConf):
     os.chdir(hydra.utils.get_original_cwd())
 
     if override_config.checkpoint is not None:
-        has_config = True
-
-        checkpoint = Path(override_config.checkpoint).resolve()
-        config_path = checkpoint.parent / "config.yaml"
-        if not config_path.exists():
-            config_path = checkpoint.parent.parent.parent / "config.yaml"
-            if not config_path.exists():
-                has_config = False
-                print(f"Could not find config path: {config_path}")
+        config_path, has_config = resolve_config_path(override_config.checkpoint)
 
         if has_config:
             print(f"Loading training config file from {config_path}")
@@ -129,6 +121,18 @@ def main(override_config: OmegaConf):
     algo.load(config.checkpoint)
 
     algo.evaluate_policy()
+
+
+def resolve_config_path(checkpoint_path: Path):
+    has_config = True
+    checkpoint = Path(checkpoint_path).resolve()
+    config_path = checkpoint.parent / "config.yaml"
+    if not config_path.exists():
+        config_path = checkpoint.parent.parent.parent / "config.yaml"
+        if not config_path.exists():
+            has_config = False
+            print(f"Could not find config path: {config_path}")
+    return config_path, has_config
 
 
 if __name__ == "__main__":
