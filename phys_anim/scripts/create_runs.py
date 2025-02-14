@@ -1,61 +1,78 @@
 import os
+import hydra
+from omegaconf import DictConfig, OmegaConf
+from dataclasses import dataclass, field
+from typing import List
 
 
-def main():
-    ##### PARAMETER CHANGES #####
-    # DEBUG = True
-    DEBUG = False
+@dataclass
+class RunConfig:
+    debug: bool = False
+    envs: List[str] = field(default_factory=lambda: ["steering", "direction_facing"])
+    use_chens_prior: List[bool] = field(default_factory=lambda: [True, False])
+    use_text: List[bool] = field(default_factory=lambda: [False])
+    use_current_pose_obs: List[bool] = field(default_factory=lambda: [True])
+    use_bigger_model: List[bool] = field(default_factory=lambda: [True])
+    train_actor: List[bool] = field(default_factory=lambda: [True, False])
 
-    # envs = ["direction_facing"]
-    # envs = ["path_follower"]
-    # envs = ["path_follower", "direction_facing", "steering"]
-    # envs = ["reach"]
-    envs = ["steering", "direction_facing", "strike"]
 
-    use_chens_prior = [True, False]
-    use_text = [False]
-    # use_text = [True, False]
-    use_current_pose_obs = [True]
-    use_bigger_model = [True]
-    train_actor = [True, False]
-    ##### PARAMETER CHANGES #####
+@dataclass
+class WandbConfig:
+    entity: str = "phys_inversion"
+    project: str = "chens_runs"
 
-    output_file_path = "runs.sh" if not DEBUG else "debug_runs.sh"
+
+@dataclass
+class Config:
+    training: RunConfig = RunConfig()
+    wandb: WandbConfig = WandbConfig()
+
+
+@hydra.main(version_base=None, config_path=None, config_name=None)
+def main(cfg: DictConfig):
+    cfg = OmegaConf.merge(OmegaConf.structured(Config()), cfg)
+    debug = cfg.training.debug
+    output_file_path = "runs.sh" if not debug else "debug_runs.sh"
+
     if os.path.exists(output_file_path):
         os.remove(output_file_path)
     base_run_command = "python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym"
     extra_args = []
-    max_epochs = 20 if DEBUG else 4000
-    base_run_command += " seed=${seed}" if not DEBUG else ""
-    base_run_command += " auto_load_latest=False" if DEBUG else ""
-    if not DEBUG:
-        extra_args += ["wandb.wandb_entity=phys_inversion wandb.wandb_project=chens_runs"]
+    max_epochs = 20 if debug else 4000
 
-    if DEBUG:
-        opts = ["small_run", "wdb", ]
+    if not debug:
+        base_run_command += " seed=${seed}"
+        extra_args += [f"wandb.wandb_entity={cfg.wandb.entity} wandb.wandb_project={cfg.wandb.project}"]
     else:
-        opts = ["full_run", "wdb", "combined_callbacks"]
+        base_run_command += " auto_load_latest=False"
+
+    opts = ["small_run", "wdb"] if debug else ["full_run", "wdb", "combined_callbacks"]
 
     # create runs for each combination of hyperparameters
-    for env in envs:
-        for prior_flag in use_chens_prior:
-            for text_flag in use_text:
-                for current_pose in use_current_pose_obs:
-                    for bigger_model in use_bigger_model:
-                        for train_actor_flag in train_actor:
+    for env in cfg.training.envs:
+        for prior_flag in cfg.training.use_chens_prior:
+            for text_flag in cfg.training.use_text:
+                for current_pose in cfg.training.use_current_pose_obs:
+                    for bigger_model in cfg.training.use_bigger_model:
+                        for train_actor_flag in cfg.training.train_actor:
                             current_opts = opts.copy()
                             current_extra_args = extra_args.copy()
                             current_run_command = ""
                             current_run_command += base_run_command
                             current_run_command += f' +exp=inversion/{env}'
-                            current_experiment_name = f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}_train_actor_{train_actor_flag}"
+                            current_experiment_name = (
+                                f"{env}_prior_{prior_flag}_text_{text_flag}_current_pose_{current_pose}_bigger_{bigger_model}_train_actor_{train_actor_flag}"
+                            )
                             # add with ++ all the flags for easier filtering
-                            current_run_command += f" ++prior={prior_flag} ++text={text_flag} ++current_pose={current_pose} ++bigger={bigger_model}"
+
+                            current_run_command += (
+                                f" ++prior={prior_flag} ++text={text_flag} ++current_pose={current_pose} ++bigger={bigger_model}"
+                            )
                             if train_actor_flag:
                                 current_run_command += f" ++algo_type=MaskedMimic_Finetune"
                             else:
                                 current_run_command += f" ++algo_type=MaskedMimic_Inversion"
-                            if DEBUG:
+                            if debug:
                                 current_experiment_name += '_DEBUG'
                             current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
                             current_run_command += (
