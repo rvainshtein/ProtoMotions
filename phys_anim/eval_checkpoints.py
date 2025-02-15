@@ -19,6 +19,12 @@ class WandbConfig:
     entity: str = "phys_inversion"
     project: str = "eval_results"
 
+@dataclass
+class PerturbationsConfig:
+    gravity_z: float = -9.81
+    static_friction: float = 1.0
+    dynamic_friction: float = 1.0
+    complex_terrain: bool = False
 
 @dataclass
 class EvalConfig:
@@ -32,6 +38,8 @@ class EvalConfig:
     num_envs: int = field(default=1024)
     games_per_env: int = field(default=1)
     prior_only: bool = field(default=False)
+    use_perturbations: bool = field(default=False)
+    perturbations: PerturbationsConfig = PerturbationsConfig()
 
 
 def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
@@ -59,6 +67,13 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
     )
     if config.log_eval_results:
         cmd += " ++algo.config.log_eval_results=True"
+    if config.use_perturbations:
+        for key, value in config.perturbations.items():
+            if key == "complex_terrain":
+                if value is True:
+                    cmd += " +terrain=complex"
+            else:
+                cmd += f" ++env.config.perturbations.{key}={value}"
     return cmd
 
 
