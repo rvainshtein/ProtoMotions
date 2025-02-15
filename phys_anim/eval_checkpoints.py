@@ -18,6 +18,9 @@ class WandbConfig:
     entity: str = "phys_inversion"
     project: str = "eval_results"
 
+@dataclass
+class PerturbationsConfig:
+    gravity_z: float = -15
 
 @dataclass
 class EvalConfig:
@@ -30,6 +33,8 @@ class EvalConfig:
     opts: List[str] = field(default_factory=lambda: ["wdb"])
     num_envs: int = field(default=1024)
     games_per_env: int = field(default=1)
+    use_perturbations: bool = field(default=True)
+    perturbations: PerturbationsConfig = PerturbationsConfig()
 
 
 def build_command(config, checkpoint, gpu_id, base_dir):
@@ -45,6 +50,9 @@ def build_command(config, checkpoint, gpu_id, base_dir):
     )
     if config.log_eval_results:
         cmd += " ++algo.config.log_eval_results=True"
+    if config.use_perturbations:
+        for key, value in config.perturbations.items():
+            cmd += f" ++env.config.perturbations.{key}={value}"
     return cmd
 
 

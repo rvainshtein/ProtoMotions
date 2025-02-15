@@ -35,6 +35,12 @@ else:
 
 class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def __init__(self, config, device, motion_lib: Optional[MotionLib] = None):
+        perturbations = config.get("perturbations", None)
+        if perturbations is not None:
+            self.gravity_z = perturbations["gravity_z"]
+        else:
+            self.gravity_z = -9.81
+
         super().__init__(config, device, motion_lib=motion_lib)
         self.setup_task()
 
