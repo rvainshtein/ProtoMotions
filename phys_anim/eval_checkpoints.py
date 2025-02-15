@@ -4,11 +4,12 @@ import time
 from dataclasses import dataclass, field
 from itertools import cycle
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, ListConfig
 from rich.console import Console
+from rich.syntax import Syntax
 
 from phys_anim.eval_agent import resolve_config_path
 
@@ -30,18 +31,31 @@ class EvalConfig:
     opts: List[str] = field(default_factory=lambda: ["wdb"])
     num_envs: int = field(default=1024)
     games_per_env: int = field(default=1)
+    prior_only: bool = field(default=False)
 
 
-def build_command(config, checkpoint, gpu_id, base_dir):
+def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
+    opts = config.opts
+    more_options = config.more_options
+    if config.prior_only:
+        print("Using prior only, make sure checkpoint is an inversion model.")
+        opts.append("masked_mimic/inversion/disable_inversion_obs")
+        more_options += (
+            " +env.config.use_chens_prior=True"
+            " ++algo_type=MaskedMimic_Prior_Only"
+            " ++bigger=null"
+            " ++current_pose=null"
+            " ++prior=True"
+        )
     cmd = (
         f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
         f" +checkpoint={checkpoint} +device={gpu_id}"
         f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
-        f" +opt=[{','.join(config.opts)}]"
+        f" +opt=[{','.join(opts)}]"
         f" +env.config.log_output=False"
         f" +base_dir={base_dir}"
         f" +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
-        f" {config.more_options}"
+        f" {more_options}"
     )
     if config.log_eval_results:
         cmd += " ++algo.config.log_eval_results=True"
@@ -72,14 +86,18 @@ def main(config: DictConfig):
         gpu_id = next(gpu_cycle) if gpu_cycle else gpu_ids[0]
         cmd = build_command(config, checkpoint, gpu_id, base_dir)
 
+        cmd_print = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
+
         if len(gpu_ids) == 1:
-            console.print(f"[bold blue]Running sequentially on GPU {gpu_id}:[/bold blue] [italic]{cmd}[/italic]")
+            console.print(f"[bold blue]Running sequentially on GPU {gpu_id}:[/bold blue]")
+            console.print(cmd_print)
             subprocess.run(cmd, shell=True)
         else:
             while len(processes) >= len(gpu_ids):
                 processes = [p for p in processes if p.poll() is None]  # Remove finished processes
                 time.sleep(1)
-            console.print(f"[bold blue]Running on GPU {gpu_id}:[/bold blue] [italic]{cmd}[/italic]")
+            console.print(f"[bold blue]Running on GPU {gpu_id}:[/bold blue]")
+            console.print(cmd_print)
             processes.append(subprocess.Popen(cmd, shell=True))
 
     # Wait for all remaining processes to finish
