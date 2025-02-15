@@ -36,7 +36,7 @@ class EvalConfig:
     opts: List[str] = field(default_factory=lambda: ["wdb"])
     num_envs: int = field(default=1024)
     games_per_env: int = field(default=1)
-    use_perturbations: bool = field(default=True)
+    use_perturbations: bool = field(default=False)
     perturbations: PerturbationsConfig = PerturbationsConfig()
 
 
