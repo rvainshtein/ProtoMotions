@@ -20,7 +20,10 @@ class WandbConfig:
 
 @dataclass
 class PerturbationsConfig:
-    gravity_z: float = -15
+    gravity_z: float = -9.81
+    static_friction: float = 1.0
+    dynamic_friction: float = 1.0
+    complex_terrain: bool = False
 
 @dataclass
 class EvalConfig:
@@ -42,7 +45,6 @@ def build_command(config, checkpoint, gpu_id, base_dir):
         f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
         f" +checkpoint={checkpoint} +device={gpu_id}"
         f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
-        f" +opt=[{','.join(config.opts)}]"
         f" +env.config.log_output=False"
         f" +base_dir={base_dir}"
         f" +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
@@ -52,7 +54,11 @@ def build_command(config, checkpoint, gpu_id, base_dir):
         cmd += " ++algo.config.log_eval_results=True"
     if config.use_perturbations:
         for key, value in config.perturbations.items():
-            cmd += f" ++env.config.perturbations.{key}={value}"
+            if key == "complex_terrain":
+                config.opts.append("terrain.complex")
+            else:
+                cmd += f" ++env.config.perturbations.{key}={value}"
+    cmd += f" +opt=[{','.join(config.opts)}]"
     return cmd
 
 
