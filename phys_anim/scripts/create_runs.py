@@ -69,15 +69,16 @@ def main(cfg: DictConfig):
                                 f" ++prior={prior_flag} ++text={text_flag} ++current_pose={current_pose} ++bigger={bigger_model}"
                             )
                             if train_actor_flag:
-                                current_run_command += f" ++algo_type=MaskedMimic_Finetune"
+                                algo_type = "MaskedMimic_Inversion"
                             else:
-                                current_run_command += f" ++algo_type=MaskedMimic_Inversion"
+                                algo_type = "MaskedMimic_Finetune"
+                            current_run_command += f" ++algo_type={algo_type}"
                             if debug:
                                 current_experiment_name += '_DEBUG'
                             current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
                             current_run_command += (
                                     f" experiment_name={current_experiment_name}" + "_${seed}" +
-                                    f" ++clean_exp_name={current_experiment_name}"
+                                    f" ++clean_exp_name={algo_type}_{current_experiment_name}"
                             )
                             current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
                             current_extra_args += [f"env.config.use_text={text_flag}"]

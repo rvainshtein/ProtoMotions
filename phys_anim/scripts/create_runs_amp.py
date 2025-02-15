@@ -54,17 +54,17 @@ def main(cfg: DictConfig):
             current_experiment_name = f"{env}_disable_discriminator_{disable_discriminator}"
             # add with ++ all the flags for easier filtering
             if disable_discriminator:
-                current_run_command += f" ++algo_type=PureRL"
+                algo_type = "PureRL"
             else:
-                current_run_command += f" ++algo_type=AMP"
-
+                algo_type = "AMP"
+            current_run_command += f" ++algo_type={algo_type}"
             if debug:
                 current_experiment_name += '_DEBUG'
 
             current_extra_args += [f"algo.config.max_epochs={max_epochs}"]
             current_run_command += (
                     f" experiment_name={current_experiment_name}" + "_${seed}" +
-                    f" ++clean_exp_name={current_experiment_name}"
+                    f" ++clean_exp_name={algo_type}_{current_experiment_name}"
             )
 
             if disable_discriminator:
