@@ -45,6 +45,7 @@ def build_command(config, checkpoint, gpu_id, base_dir):
         f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
         f" +checkpoint={checkpoint} +device={gpu_id}"
         f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
+        f" +opt=[{','.join(config.opts)}]"
         f" +env.config.log_output=False"
         f" +base_dir={base_dir}"
         f" +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
@@ -55,10 +56,10 @@ def build_command(config, checkpoint, gpu_id, base_dir):
     if config.use_perturbations:
         for key, value in config.perturbations.items():
             if key == "complex_terrain":
-                config.opts.append("terrain.complex")
+                if value is True:
+                    cmd += " +terrain=complex"
             else:
                 cmd += f" ++env.config.perturbations.{key}={value}"
-    cmd += f" +opt=[{','.join(config.opts)}]"
     return cmd
 
 
