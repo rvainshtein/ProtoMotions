@@ -1,5 +1,6 @@
 import glob
 import subprocess
+import time
 from dataclasses import dataclass, field
 from itertools import cycle
 from pathlib import Path
@@ -31,6 +32,22 @@ class EvalConfig:
     games_per_env: int = field(default=1)
 
 
+def build_command(config, checkpoint, gpu_id, base_dir):
+    cmd = (
+        f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
+        f" +checkpoint={checkpoint} +device={gpu_id}"
+        f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
+        f" +opt=[{','.join(config.opts)}]"
+        f" +env.config.log_output=False"
+        f" +base_dir={base_dir}"
+        f" +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
+        f" {config.more_options}"
+    )
+    if config.log_eval_results:
+        cmd += " ++algo.config.log_eval_results=True"
+    return cmd
+
+
 @hydra.main(version_base=None, config_path=None, config_name=None)
 def main(config: DictConfig):
     console = Console()
@@ -45,35 +62,27 @@ def main(config: DictConfig):
     else:
         checkpoint_paths = config.checkpoint_paths
 
-    gpu_cycle = cycle(config.gpu_ids) if len(config.gpu_ids) > 1 else None
+    gpu_ids = config.gpu_ids
+    gpu_cycle = cycle(gpu_ids) if len(gpu_ids) > 1 else None
     processes = []
 
-    volume_configuration = f' +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}'
-
     for checkpoint in checkpoint_paths:
-        gpu_id = next(gpu_cycle) if gpu_cycle else config.gpu_ids[0]
         checkpoint = Path(checkpoint).resolve()
         base_dir = resolve_config_path(checkpoint)[0].parent.parent
-        cmd = (
-            f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
-            f" +checkpoint={checkpoint} +device={gpu_id}"
-            f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
-            f" +opt=[{','.join(config.opts)}]"
-            f" +env.config.log_output=False"
-            f" +base_dir={base_dir}"
-            f" {volume_configuration} {config.more_options}"
-        )
+        gpu_id = next(gpu_cycle) if gpu_cycle else gpu_ids[0]
+        cmd = build_command(config, checkpoint, gpu_id, base_dir)
 
-        if config.log_eval_results:
-            cmd += " ++algo.config.log_eval_results=True"
-
-        console.print(f"[bold blue]Running:[/bold blue] [italic]{cmd}[/italic]")
-
-        if gpu_cycle:
-            processes.append(subprocess.Popen(cmd, shell=True))
-        else:
+        if len(gpu_ids) == 1:
+            console.print(f"[bold blue]Running sequentially on GPU {gpu_id}:[/bold blue] [italic]{cmd}[/italic]")
             subprocess.run(cmd, shell=True)
+        else:
+            while len(processes) >= len(gpu_ids):
+                processes = [p for p in processes if p.poll() is None]  # Remove finished processes
+                time.sleep(1)
+            console.print(f"[bold blue]Running on GPU {gpu_id}:[/bold blue] [italic]{cmd}[/italic]")
+            processes.append(subprocess.Popen(cmd, shell=True))
 
+    # Wait for all remaining processes to finish
     for p in processes:
         p.wait()
 
