@@ -50,6 +50,7 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
         opts.append("masked_mimic/inversion/disable_inversion_obs")
         more_options += (
             " +env.config.use_chens_prior=True"
+            " +env.config.prior_only=True"
             " ++algo_type=MaskedMimic_Prior_Only"
             " ++bigger=null"
             " ++current_pose=null"
