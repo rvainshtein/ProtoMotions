@@ -97,7 +97,7 @@ class TensorAverageMeter:
 
     def state_dict(self):
         """Save the list of tensors as a single stacked tensor."""
-        return {"tensors": torch.stack(self.tensors) if self.tensors else torch.empty(0)}
+        return {"tensors": torch.cat(self.tensors, dim=0) if self.tensors else torch.empty(0)}
 
     def load_state_dict(self, state_dict):
         """Load state with backward compatibility (support empty tensors)."""
