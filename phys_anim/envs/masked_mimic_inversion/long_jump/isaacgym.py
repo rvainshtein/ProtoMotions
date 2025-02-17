@@ -21,8 +21,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self._init_dist_from_start = self.config.long_jump_params.get("init_dist_from_start", 10)
 
         xy_start_pos = self.terrain.sample_valid_locations(self.num_envs)  # [num_envs, 2]
-        ones = torch.ones_like(xy_start_pos[:, 0:1])
-        self.longjump_start_position = torch.cat([self.longjump_start_position, ones], dim=-1)  # [num_envs, 3]
+        ones = torch.ones_like(xy_start_pos[:, 0:1], device=self.device)
+        self.longjump_start_position = torch.cat([xy_start_pos, ones], dim=-1)  # [num_envs, 3]
         self.goal = self.longjump_start_position.clone()
         self.goal[:, 0] += 30
         self._jump_start = self.longjump_start_position.clone()
@@ -53,9 +53,6 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         # Apply changes
         self.initial_humanoid_root_states = initial_humanoid_root_states
         self.initial_rigid_body_pos = self.initial_rigid_body_pos.clone()
-
-        # Ensure all body parts start above termination height
-        self.initial_rigid_body_pos[..., 2] += torch.min(self.initial_rigid_body_pos[:, 2], dim=-1)
 
     # TODO: check if this is correct
     def reset_actors(self, env_ids):
@@ -132,7 +129,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
         root_states = self.get_humanoid_root_states()[env_ids]
-        obs = compute_longjump_observations(root_states, self.goal[env_ids], self._jump_start[env_ids], self.w_last)
+        obs = compute_longjump_observations(root_states, self.goal[env_ids], self._jump_start[env_ids, 0], self.w_last)
         self.inversion_obs[env_ids] = torch.cat([obs, self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
@@ -165,7 +162,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         distance_to_target = torch.norm(root_states[:, 0:3] - self.goal, dim=-1)
 
         # jump height reward
-        x_over_40 = torch.any(self.rigid_body_pos[:, self.non_termination_contact_body_ids, 0] > self._jump_start,
+        jump_start_x = self._jump_start[:, 0]
+        x_over_40 = torch.any(self.rigid_body_pos[:, self.non_termination_contact_body_ids, 0] > jump_start_x[:, None],
                               dim=-1)  # shape 1024
         jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
         jump_height_reward[x_over_40] = root_states[x_over_40, 2]
@@ -178,7 +176,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
 
         self._jump_length[reset_x_over_40_and_contact_force_not_zero] = torch.mean(
             self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, 0],
-            dim=-1) - self._jump_start
+            dim=-1) - jump_start_x[reset_x_over_40_and_contact_force_not_zero]
         self._current_accumulated_errors[:] += distance_to_target
         self._current_successes[:] = self._jump_length > 1.5
         self._last_length[:] = self.progress_buf[:]
@@ -209,7 +207,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                                                                           self.config.max_episode_length,
                                                                           self.config.enable_height_termination,
                                                                           self.termination_heights,
-                                                                          self._jump_start,
+                                                                          self._jump_start[:, 0],
                                                                           self.longjump_start_position[:, 1])
 
 
@@ -217,8 +215,9 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
 ###=========================jit functions=========================###
 #####################################################################
 
-# @torch.jit.script
+@torch.jit.script
 def compute_longjump_observations(root_states, goal, jump_start, w_last):
+    # type: (Tensor, Tensor, Tensor, bool) -> Tensor
     root_pos = root_states[:, 0:3]
     root_rot = root_states[:, 3:7]
 
@@ -226,7 +225,7 @@ def compute_longjump_observations(root_states, goal, jump_start, w_last):
     local_tar_pos = goal - root_pos
     local_tar_pos = torch_utils.quat_rotate(heading_rot_inv, local_tar_pos, w_last)
 
-    humanoid_jumpstart_diff = jump_start - root_pos[:, 0: 1]
+    humanoid_jumpstart_diff = (jump_start - root_pos[:, 0]).unsqueeze(-1)
     obs = torch.concatenate((local_tar_pos, humanoid_jumpstart_diff), dim=-1)
     return obs
 
@@ -244,7 +243,8 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
     vel_reward = root_states[:, 7]
 
     # jump height reward
-    x_over_40 = torch.any(rigid_body_pos[:, non_termination_contact_body_ids, 0] > jump_start, dim=-1)  # shape 1024
+    x_over_40 = torch.any(rigid_body_pos[:, non_termination_contact_body_ids, 0] > jump_start[:, None],
+                          dim=-1)  # shape 1024
     jump_height_reward = torch.zeros(root_states.shape[0]).to(root_states.device)
     jump_height_reward[x_over_40] = root_states[x_over_40, 2]
 
@@ -255,7 +255,7 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
         torch.sum(torch.sum(torch.square(contact_buf), dim=-1), dim=-1)) > force_threshold
     reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
     jump_length = torch.mean(rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
-                             dim=-1) - jump_start
+                             dim=-1) - jump_start[reset_x_over_40_and_contact_force_not_zero]
 
     jump_length_reward[reset_x_over_40_and_contact_force_not_zero] = jump_length
 
@@ -303,7 +303,8 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination
         # 0.1500, 0.1500, 0.1500, 0.1500, 0.1500, 0.1500, 0.1500, 0.1500, 0.1500,
         # 0.1500, 0.1500, 0.1500, 0.1500, 0.1500, 0.3000], device='cuda:0')
 
-        x_over_40 = torch.any(rigid_body_pos[:, non_termination_contact_body_ids, 0] > jump_start, dim=-1)  # shape 1024
+        x_over_40 = torch.any(rigid_body_pos[:, non_termination_contact_body_ids, 0] > jump_start[:, None],
+                              dim=-1)  # shape 1024
 
         contact_force_not_zero = torch.sqrt(
             torch.sum(torch.sum(torch.square(contact_buf), dim=-1), dim=-1)) > force_threshold
@@ -311,7 +312,7 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination
         reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
 
         jump_length = torch.mean(rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
-                                 dim=-1) - jump_start
+                                 dim=-1) - jump_start[reset_x_over_40_and_contact_force_not_zero]
         # if not torch.equal(jump_length, torch.tensor([]).to(jump_length.device)):
         #     print("jump length is ", jump_length)
 
