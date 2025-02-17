@@ -22,10 +22,10 @@ class WandbConfig:
 
 @dataclass
 class PerturbationsConfig:
-    gravity_z: float = -9.81
-    static_friction: float = 1.0
-    dynamic_friction: float = 1.0
-    complex_terrain: bool = False
+    gravity_z: float = field(default=-9.81)
+    static_friction: float = field(default=1.0)
+    dynamic_friction: float = field(default=1.0)
+    complex_terrain: bool = field(default=False)
 
 
 @dataclass
@@ -38,10 +38,10 @@ class EvalConfig:
     wandb: WandbConfig = WandbConfig()
     opt: List[str] = field(default_factory=lambda: ["wdb"])
     num_envs: int = field(default=1024)
-    games_per_env: int = field(default=1)
+    games_per_env: int = field(default=5)
     prior_only: bool = field(default=False)
     use_perturbations: bool = field(default=False)
-    perturbations: PerturbationsConfig = PerturbationsConfig()
+    perturbations: PerturbationsConfig = field(default_factory= lambda: PerturbationsConfig())
     record_video: bool = field(default=False)
 
 

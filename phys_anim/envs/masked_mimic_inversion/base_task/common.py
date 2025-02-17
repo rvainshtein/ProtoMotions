@@ -35,13 +35,12 @@ else:
 
 class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def __init__(self, config, device, motion_lib: Optional[MotionLib] = None):
-        perturbations = config.get("perturbations", None)
-        if perturbations is not None:
-            self.gravity_z = perturbations["gravity_z"]
+        perturbations = config.get("perturbations", {})
+        self.gravity_z = perturbations.get("gravity_z", -9.81)
+        if "static_friction" in perturbations:
             config.simulator.plane.static_friction = perturbations["static_friction"]
+        if "dynamic_friction" in perturbations:
             config.simulator.plane.dynamic_friction = perturbations["dynamic_friction"]
-        else:
-            self.gravity_z = -9.81
 
         super().__init__(config, device, motion_lib=motion_lib)
         self.setup_task()
@@ -172,7 +171,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
     def mask_everything(self):
         # By Default mask everything out. Individual tasks will override this.
-        self.historical_pose_obs_mask[:] = self.config.get("prior_only", False)  # for some reason the initialization contains it? maybe only in inference?
+        self.historical_pose_obs_mask[:] = self.config.get("prior_only",
+                                                           False)  # for some reason the initialization contains it? maybe only in inference?
         self.target_pose_joints[:] = False
         self.masked_mimic_target_poses_masks[:] = False
         self.masked_mimic_target_bodies_masks[:] = False
