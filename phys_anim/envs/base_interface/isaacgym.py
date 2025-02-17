@@ -112,7 +112,10 @@ class GymBaseInterface(BaseInterface, Humanoid):  # type: ignore[misc]
 
             self.gym.viewer_camera_look_at(self.viewer, None, cam_pos, cam_target)
 
-        self.user_is_recording, self.user_recording_state_change = False, False
+        if self.config.get("record_video", False):
+            self.user_is_recording, self.user_recording_state_change = True, True
+        else:
+            self.user_is_recording, self.user_recording_state_change = False, False
         self.user_recording_video_queue_size = 100000
         rendering_out = os.path.join("output", "renderings")
         os.makedirs(rendering_out, exist_ok=True)

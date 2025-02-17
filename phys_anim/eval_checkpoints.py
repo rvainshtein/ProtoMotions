@@ -19,12 +19,14 @@ class WandbConfig:
     entity: str = "phys_inversion"
     project: str = "eval_results"
 
+
 @dataclass
 class PerturbationsConfig:
     gravity_z: float = -9.81
     static_friction: float = 1.0
     dynamic_friction: float = 1.0
     complex_terrain: bool = False
+
 
 @dataclass
 class EvalConfig:
@@ -40,6 +42,12 @@ class EvalConfig:
     prior_only: bool = field(default=False)
     use_perturbations: bool = field(default=False)
     perturbations: PerturbationsConfig = PerturbationsConfig()
+    record_video: bool = field(default=False)
+
+    def __post_init__(self):
+        if self.record_video:
+            self.num_envs = 1
+            self.log_eval_results = False
 
 
 def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
@@ -56,6 +64,8 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
             " ++current_pose=null"
             " ++prior=True"
         )
+        if config.export_video:
+            more_options += " ++env.config.record_video=True"
     cmd = (
         f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
         f" +checkpoint={checkpoint} +device={gpu_id}"
