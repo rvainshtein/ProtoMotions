@@ -233,7 +233,7 @@ def compute_longjump_observations(root_states, goal, jump_start, w_last):
 @torch.jit.script
 def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_body_pos, contact_buf,
                             non_termination_contact_body_ids):
-    # type: (Tensor, Tensor, Tensor, int, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor) -> Tuple[Tensor, Dict[str, Tensor]]
     root_pos = root_states[:, 0:3]
     prev_dist = torch.norm(prev_root_pos - goal, dim=-1)
     curr_dist = torch.norm(root_pos - goal, dim=-1)
@@ -283,7 +283,7 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
 def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids, rigid_body_pos,
                            max_episode_length, enable_early_termination, termination_heights, jump_start,
                            y_corridor_center):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, int, bool, Tensor, int, int) -> Tuple[Tensor, Tensor]
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, int, bool, Tensor, Tensor, Tensor) -> Tuple[Tensor, Tensor]
     force_threshold = 50
     terminated = torch.zeros_like(reset_buf)
 
