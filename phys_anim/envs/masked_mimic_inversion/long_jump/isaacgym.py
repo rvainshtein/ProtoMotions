@@ -19,11 +19,14 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self._near_prob = self.config.long_jump_params.near_prob
         self.first_in = True
         self._init_dist_from_start = self.config.long_jump_params.get("init_dist_from_start", 10)
-        self._jump_start = self.config.long_jump_params.get("jump_start", 20)
 
-        # self.y_corridor_center = self.root_states[0, 1].clone()
-        self.y_corridor_center = 50
-        self.goal = torch.tensor([30, self.y_corridor_center, 1]).to(self.device)
+        xy_start_pos = self.terrain.sample_valid_locations(self.num_envs)  # [num_envs, 2]
+        ones = torch.ones_like(xy_start_pos[:, 0:1])
+        self.longjump_start_position = torch.cat([self.longjump_start_position, ones], dim=-1)  # [num_envs, 3]
+        self.goal = self.longjump_start_position.clone()
+        self.goal[:, 0] += 30
+        self._jump_start = self.longjump_start_position.clone()
+        self._jump_start[:, 0] += self.config.long_jump_params.get("jump_start", 20)
         self.tar_speed = 4  # not used?
 
         self.set_initial_root_state()
@@ -39,12 +42,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
 
         # Reset velocities to zero
         initial_humanoid_root_states[:, 7:13] = 0
-
-        # Set valid humanoid position
-        initial_humanoid_root_states[..., 0] = max(self._jump_start - self._init_dist_from_start,
-                                                   5)  # X position (prevent triggering x_over_40)
-        initial_humanoid_root_states[..., 1] = self.y_corridor_center  # Y position (prevent triggering body_out)
-        initial_humanoid_root_states[..., 2] = 1  # Z position (above termination height)
+        initial_humanoid_root_states[:, :3] = self.longjump_start_position.clone()
 
         # Set orientation (valid quaternion)
         initial_humanoid_root_states[..., 3] = 0
@@ -57,7 +55,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self.initial_rigid_body_pos = self.initial_rigid_body_pos.clone()
 
         # Ensure all body parts start above termination height
-        self.initial_rigid_body_pos[..., 2] = 1
+        self.initial_rigid_body_pos[..., 2] += torch.min(self.initial_rigid_body_pos[:, 2], dim=-1)
 
     # TODO: check if this is correct
     def reset_actors(self, env_ids):
@@ -131,8 +129,10 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
 
     def compute_task_obs(self, env_ids=None):
         super().compute_task_obs(env_ids)
-        root_states = self.get_humanoid_root_states()
-        obs = compute_longjump_observations(root_states, self.goal, self._jump_start, self.w_last)
+        if env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device, dtype=torch.long)
+        root_states = self.get_humanoid_root_states()[env_ids]
+        obs = compute_longjump_observations(root_states, self.goal[env_ids], self._jump_start[env_ids], self.w_last)
         self.inversion_obs[env_ids] = torch.cat([obs, self.current_pose_obs], dim=-1)
 
     def compute_reward(self, actions):
@@ -141,7 +141,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         self.rew_buf[:], output_dict = compute_longjump_reward(root_states,
                                                                self._prev_root_pos,
                                                                self.goal,
-                                                               self._jump_start,
+                                                               self._jump_start[:, 0],
                                                                self.rigid_body_pos,
                                                                self.contact_forces,
                                                                self.non_termination_contact_body_ids)
@@ -209,7 +209,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                                                                           self.config.enable_height_termination,
                                                                           self.termination_heights,
                                                                           self._jump_start,
-                                                                          self.y_corridor_center)
+                                                                          self.longjump_start_position[:, 1])
 
 
 #####################################################################
