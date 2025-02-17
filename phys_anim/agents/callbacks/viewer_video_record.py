@@ -50,3 +50,4 @@ class ViewerVideoRecord(RL_EvalCallback):
 
     def on_post_evaluate_policy(self):
         self.env.user_is_recording, self.env.user_recording_state_change = False, True
+        self.env.render()

@@ -4,10 +4,10 @@ import time
 from dataclasses import dataclass, field
 from itertools import cycle
 from pathlib import Path
-from typing import List, Union
+from typing import List
 
 import hydra
-from omegaconf import DictConfig, OmegaConf, ListConfig
+from omegaconf import DictConfig, OmegaConf
 from rich.console import Console
 from rich.syntax import Syntax
 
@@ -36,7 +36,7 @@ class EvalConfig:
     more_options: str = field(default="")
     log_eval_results: bool = field(default=True)
     wandb: WandbConfig = WandbConfig()
-    opts: List[str] = field(default_factory=lambda: ["wdb"])
+    opt: List[str] = field(default_factory=lambda: ["wdb"])
     num_envs: int = field(default=1024)
     games_per_env: int = field(default=1)
     prior_only: bool = field(default=False)
@@ -44,18 +44,13 @@ class EvalConfig:
     perturbations: PerturbationsConfig = PerturbationsConfig()
     record_video: bool = field(default=False)
 
-    def __post_init__(self):
-        if self.record_video:
-            self.num_envs = 1
-            self.log_eval_results = False
-
 
 def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
-    opts = config.opts
+    opt = config.opt
     more_options = config.more_options
     if config.prior_only:
         print("Using prior only, make sure checkpoint is an inversion model.")
-        opts.append("masked_mimic/inversion/disable_inversion_obs")
+        opt.append("masked_mimic/inversion/disable_inversion_obs")
         more_options += (
             " +env.config.use_chens_prior=True"
             " +env.config.prior_only=True"
@@ -64,16 +59,23 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
             " ++current_pose=null"
             " ++prior=True"
         )
-        if config.export_video:
-            more_options += " ++env.config.record_video=True"
+    if config.record_video:
+        config.opt = ["viewer_video_record"]
+        config.log_eval_results = False
+        more_options += (" algo.config.eval_callbacks.export_video_cb.config.output_path="
+                         "output/recordings/sweeps/${experiment_name}/${algo_type}")
+        headless = False
+        config.num_envs = 1
+    else:
+        headless = True
     cmd = (
-        f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless=True"
+        f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless={headless}"
         f" +checkpoint={checkpoint} +device={gpu_id}"
         f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
-        f" +opt=[{','.join(opts)}]"
+        f" +opt=[{','.join(opt)}]"
         f" +env.config.log_output=False"
         f" +base_dir={base_dir}"
-        f" +num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
+        f" ++num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
         f" {more_options}"
     )
     if config.log_eval_results:

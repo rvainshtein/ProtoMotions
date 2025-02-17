@@ -1,9 +1,15 @@
 # @package _global_
 
+num_envs: 1
+
+env:
+  config:
+    record_video: True
+
 algo:
   config:
     eval_callbacks:
       export_video_cb:
         _target_: phys_anim.agents.callbacks.viewer_video_record.ViewerVideoRecord
         config:
-          output_path: "output/recordings/sweeps/${experiment_name}"
+          output_path: "output/recordings/sweeps/${experiment_name}/"
