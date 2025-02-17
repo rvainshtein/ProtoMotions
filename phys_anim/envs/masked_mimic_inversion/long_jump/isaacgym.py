@@ -185,13 +185,14 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
 
     def reset_task(self, env_ids=None):
         if len(env_ids) > 0:
-            average_distances = self._current_accumulated_errors[env_ids] / (
-                self._last_length[env_ids]
-            )
+            # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
+            active_envs = self._last_length[env_ids] > 0
+            average_distances = (self._current_accumulated_errors[env_ids][active_envs] /
+                                 self._last_length[env_ids][active_envs])
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
             self._failures.extend(
-                (self._current_successes[env_ids] == 0).cpu().tolist()
+                (self._current_successes[env_ids][active_envs] == 0).cpu().tolist()
             )
             self._current_successes[env_ids] = 0
             self._jump_length[env_ids] = 0
@@ -253,7 +254,6 @@ def compute_longjump_reward(root_states, prev_root_pos, goal, jump_start, rigid_
     contact_force_not_zero = torch.sqrt(
         torch.sum(torch.sum(torch.square(contact_buf), dim=-1), dim=-1)) > force_threshold
     reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
-    # TODO: MAYBE THIS IS THE PROBLEM
     jump_length = torch.mean(rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
                              dim=-1) - jump_start
 
