@@ -175,7 +175,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
         reset_x_over_40_and_contact_force_not_zero = torch.logical_and(x_over_40, contact_force_not_zero)
 
         self._jump_length[reset_x_over_40_and_contact_force_not_zero] = torch.mean(
-            self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, 0],
+            self.rigid_body_pos[reset_x_over_40_and_contact_force_not_zero][:, :, 0],
             dim=-1) - jump_start_x[reset_x_over_40_and_contact_force_not_zero]
         self._current_accumulated_errors[:] += distance_to_target
         self._current_successes[:] = self._jump_length > 1.5
