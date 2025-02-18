@@ -95,8 +95,8 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                 vertices = np.array([
                     [0, -0.5, 0],
                     [0, 0.5, 0],
-                    [self._jump_start, 0.5, 0],
-                    [self._jump_start, -0.5, 0]
+                    [self._jump_start[i, 0].cpu().numpy(), 0.5, 0],
+                    [self._jump_start[i, 0].cpu().numpy(), -0.5, 0]
                 ], dtype=np.float32)
 
                 lines = np.array([
@@ -109,10 +109,10 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
                     self.gym.add_lines(self.viewer, env_ptr, 1, line, cols)
 
                 vertices = np.array([
-                    [self._jump_start, -1.5, 0],
-                    [self._jump_start, 1.5, 0],
-                    [self.goal[0].cpu().numpy(), 1.5, 0],
-                    [self.goal[0].cpu().numpy(), -1.5, 0]
+                    [self._jump_start[i, 0].cpu().numpy(), -1.5, 0],
+                    [self._jump_start[i, 0].cpu().numpy(), 1.5, 0],
+                    [self.goal[i, 0].cpu().numpy(), 1.5, 0],
+                    [self.goal[i, 0].cpu().numpy(), -1.5, 0]
                 ], dtype=np.float32)
 
                 lines = np.array([
