@@ -48,17 +48,7 @@ class EvalConfig:
 def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
     opt = config.opt
     more_options = config.more_options
-    if config.prior_only:
-        print("Using prior only, make sure checkpoint is an inversion model.")
-        opt.append("masked_mimic/inversion/disable_inversion_obs")
-        more_options += (
-            " +env.config.use_chens_prior=True"
-            " +env.config.prior_only=True"
-            " ++algo_type=MaskedMimic_Prior_Only"
-            " ++bigger=null"
-            " ++current_pose=null"
-            " ++prior=True"
-        )
+
     if config.record_video:
         config.log_eval_results = False
         headless = False
@@ -105,7 +95,17 @@ def main(config: DictConfig):
 
     if config.record_video:
         config.opt.append("record_video")
-
+    if config.prior_only:
+        print("Using prior only, make sure checkpoint is an inversion model.")
+        config.opt.append("masked_mimic/inversion/disable_inversion_obs")
+        config.more_options += (
+            " +env.config.use_chens_prior=True"
+            " +env.config.prior_only=True"
+            " ++algo_type=MaskedMimic_Prior_Only"
+            " ++bigger=null"
+            " ++current_pose=null"
+            " ++prior=True"
+        )
     processes = []
 
     for checkpoint in checkpoint_paths:
