@@ -90,7 +90,8 @@ class ExportVideo(RL_EvalCallback):
                 # slower but more memory efficient
                 cpu_frames = [f for f in frames]
 
-                save_dir = self.record_dir / f"{(idx + self.config.index_offset):03d}"
+                # save_dir = self.record_dir / f"{(idx + self.config.index_offset):03d}"
+                save_dir = self.record_dir / self.env.config.experiment_name
                 save_dir.mkdir(exist_ok=True, parents=True)
 
                 if self.config.store_raw:
@@ -101,7 +102,7 @@ class ExportVideo(RL_EvalCallback):
                 else:
                     write_frames_to_video(
                         cpu_frames,
-                        save_dir / f"video.{self.config.suffix}",
+                        save_dir / f"{idx}.{self.config.suffix}",
                         self.config.record_fps,
                     )
 

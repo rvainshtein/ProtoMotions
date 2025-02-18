@@ -60,12 +60,8 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
             " ++prior=True"
         )
     if config.record_video:
-        config.opt = ["viewer_video_record"]
         config.log_eval_results = False
-        more_options += (" algo.config.eval_callbacks.export_video_cb.config.output_path="
-                         "output/recordings/sweeps/${experiment_name}/${algo_type}")
         headless = False
-        config.num_envs = 1
     else:
         headless = True
     cmd = (
@@ -106,6 +102,10 @@ def main(config: DictConfig):
 
     gpu_ids = config.gpu_ids
     gpu_cycle = cycle(gpu_ids) if len(gpu_ids) > 1 else None
+
+    if config.record_video:
+        config.opt.append("record_video")
+
     processes = []
 
     for checkpoint in checkpoint_paths:
