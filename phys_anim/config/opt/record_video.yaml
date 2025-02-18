@@ -6,7 +6,7 @@ algo:
       export_video_cb:
         _target_: phys_anim.agents.callbacks.export_video.ExportVideo
         config:
-          record_dir: output/recordings/sweeps
+          record_dir: output/recordings/final_recordings
           index_offset: 0
           record_fps: 30
           # For webm recordings

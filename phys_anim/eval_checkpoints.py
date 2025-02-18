@@ -41,7 +41,7 @@ class EvalConfig:
     games_per_env: int = field(default=5)
     prior_only: bool = field(default=False)
     use_perturbations: bool = field(default=False)
-    perturbations: PerturbationsConfig = field(default_factory= lambda: PerturbationsConfig())
+    perturbations: PerturbationsConfig = field(default_factory=lambda: PerturbationsConfig())
     record_video: bool = field(default=False)
 
 
@@ -70,7 +70,11 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
         for key, value in config.perturbations.items():
             if key == "complex_terrain":
                 if value is True:
-                    cmd += " +terrain=complex"
+                    cmd += (" +terrain=complex"
+                            # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, stepping, 
+                            # poles, flat]
+                            " +terrain.config.terrain_proportions=[0.3,0.25,0.2,0.2,0.05,0.,0.,0.]")
+
             else:
                 cmd += f" ++env.config.perturbations.{key}={value}"
     return cmd

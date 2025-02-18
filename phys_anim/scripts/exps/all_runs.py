@@ -24,14 +24,18 @@ def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only):
 
 def run_prior_only_evaluations():
     base_dir = '/home/rontechnion/masked_mimic_inversion'
-    clsuter_base_dir = '/lustre/fsw/portfolios/nvr/users/ctessler/models/rons_2'
+    # clsuter_base_dir = '/lustre/fsw/portfolios/nvr/users/ctessler/models/rons_2'
+    clsuter_base_dir = None
     envs_names_list = ["inversion_steering", "inversion_direction_facing", "reach"]
     # gpu_ids = [0, 1, 2, 3]
     gpu_ids = [0, ]
-    perturbations = {"None": None,
-                     "gravity_z": -15,
-                     "complex_terrain": True}
+    # perturbations = {"None": None,
+    #                  "gravity_z": -15,
+    #                  "complex_terrain": True}
+    perturbations = {"None": None}
+    record_video = True
     output_dir = "eval_runs"
+    num_envs = 20
     os.makedirs(output_dir, exist_ok=True)
     all_cmds = []
     for prior_only in [True, False]:
@@ -55,15 +59,17 @@ def run_prior_only_evaluations():
                     "python", "phys_anim/eval_checkpoints.py",
                     f"{checkpoints_arg}",
                     f"+gpu_ids=[{','.join(map(str, gpu_ids))}]",
+                    f"+num_envs={num_envs}",
                     f"+prior_only={prior_only}",
                     f"+wandb.project={project_name}",
                     f"+use_perturbations={use_perturbation}",
+                    f"+record_video={record_video}",
                 ]
                 if perturbation != "None":
                     cmd.append(f"+perturbations.{perturbation_name}={perturbation}")
                 # subprocess.run(cmd, check=True)
                 all_cmds.append(' '.join(cmd))
-    with open(os.path.join(output_dir, 'all_runs.sh'), 'w') as f:
+    with open(os.path.join(output_dir, f'{"record_" if record_video else ""}all_runs.sh'), 'w') as f:
         f.write('\n'.join(all_cmds))
 
 
