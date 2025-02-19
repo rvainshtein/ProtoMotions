@@ -29,7 +29,24 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
     ###############################################################
     def build_env(self, env_id, env_ptr, humanoid_asset):
         super().build_env(env_id, env_ptr, humanoid_asset)
+        self.set_perturbations(env_ptr)
+
         self.build_env_task(env_id, env_ptr, humanoid_asset)
+
+    def set_perturbations(self, env_ptr):
+        perturbations = self.config.get("perturbations", {})
+        if "friction" in perturbations:
+            ground_friction = perturbations["friction"]
+            foot_names = ["L_Ankle", "R_Ankle", "L_Toe", "R_Toe"]
+            foot_handles = [self.gym.find_actor_rigid_body_handle(env_ptr, 0, name) for name in foot_names]
+            rb_shape = self.gym.get_actor_rigid_body_shape_indices(env_ptr, 0)
+            rb_shape_props = self.gym.get_actor_rigid_shape_properties(env_ptr, 0)
+            for foot_handle in foot_handles:
+                foot_shape = rb_shape[foot_handle]
+                rb_shape_props[foot_shape.start].friction = ground_friction
+                rb_shape_props[foot_shape.start].rolling_friction = ground_friction
+                rb_shape_props[foot_shape.start].torsion_friction = ground_friction
+            self.gym.set_actor_rigid_shape_properties(env_ptr, 0, rb_shape_props)
 
     def build_env_task(self, env_id, env_ptr, humanoid_asset):
         pass

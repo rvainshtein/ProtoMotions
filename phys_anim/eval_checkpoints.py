@@ -23,8 +23,7 @@ class WandbConfig:
 @dataclass
 class PerturbationsConfig:
     gravity_z: float = field(default=-9.81)
-    static_friction: float = field(default=1.0)
-    dynamic_friction: float = field(default=1.0)
+    friction: float = field(default=1.0)
     complex_terrain: bool = field(default=False)
 
 
