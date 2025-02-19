@@ -5,7 +5,7 @@ import subprocess
 from phys_anim.scripts.exps.baselines import get_valid_reach_runs
 
 
-def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only):
+def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only, record_video):
     if prior_only:
         checkpoints_arg = glob.glob(f"{base_dir}/{env_name}/*"
                                     f"_prior_True_text_False_current_pose_True_bigger_True_train_actor_False_0/"
@@ -13,11 +13,17 @@ def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only):
         checkpoints_arg = f"+checkpoint_paths=[{checkpoints_arg}]"
     else:
         if env_name != 'reach' or (env_name == 'reach' and perturbation == "None"):
-            checkpoints_arg = f"+checkpoint_paths_glob={base_dir}/{env_name}/*/last.ckpt"
+            if record_video:
+                checkpoints_arg = f"+checkpoint_paths_glob={base_dir}/{env_name}/*_0/last.ckpt"
+            else:
+                checkpoints_arg = f"+checkpoint_paths_glob={base_dir}/{env_name}/*/last.ckpt"
         else:
             reach_runs = get_valid_reach_runs(base_dir, f'reach/*/last.ckpt',
                                               f'inversion_direction_facing/*/last.ckpt')
-            reach_runs = [run + '/last.ckpt' for run in reach_runs]
+            if record_video:
+                reach_runs = [run + '/last.ckpt' for run in reach_runs if '_0/' in run]
+            else:
+                reach_runs = [run + '/last.ckpt' for run in reach_runs]
             checkpoints_arg = f"checkpoint_paths=[{','.join(reach_runs)}]"
     return checkpoints_arg
 
@@ -41,7 +47,7 @@ def run_prior_only_evaluations():
     for prior_only in [True, False]:
         for env_name in envs_names_list:
             for perturbation in perturbations:
-                checkpoints_arg = get_checkpoints_arg(base_dir, env_name, perturbation, prior_only)
+                checkpoints_arg = get_checkpoints_arg(base_dir, env_name, perturbation, prior_only, record_video)
 
                 project_name = "_".join(["final_eval", env_name.replace('inversion_', '')])
 
