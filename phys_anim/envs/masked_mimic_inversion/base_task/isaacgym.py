@@ -50,8 +50,9 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
         if "mass_multiplier" in perturbations:
             mass_multiplier = perturbations["mass_multiplier"]
             rb_props = self.gym.get_actor_rigid_body_properties(env_ptr, 0)
-            for i in range(len(rb_props)):
-                rb_props[i].mass *= mass_multiplier
+            for body_name, multiplier in mass_multiplier.items():
+                body_handle = self.gym.find_actor_rigid_body_handle(env_ptr, 0, body_name)
+                rb_props[body_handle].mass *= multiplier
             self.gym.set_actor_rigid_body_properties(env_ptr, 0, rb_props)
 
     def build_env_task(self, env_id, env_ptr, humanoid_asset):

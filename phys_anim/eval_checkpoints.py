@@ -25,7 +25,7 @@ class PerturbationsConfig:
     gravity_z: float = field(default=-9.81)
     friction: float = field(default=1.0)
     complex_terrain: bool = field(default=False)
-    mass_multiplier: float = field(default=1.0)
+    mass_multiplier: dict = field(default_factory=lambda: {})
 
 
 @dataclass
