@@ -57,6 +57,7 @@ class MaskedMimicLongJumpHumanoid(MaskedMimicTaskHumanoid):
     # TODO: check if this is correct
     def reset_actors(self, env_ids):
         super().reset_actors(env_ids)
+        self.reset_default_env_ids = env_ids
         # Taken from the original reset_default
         root_pos = self.initial_humanoid_root_states[env_ids, 0:3].clone()
         root_rot = self.initial_humanoid_root_states[env_ids, 3:7].clone()
