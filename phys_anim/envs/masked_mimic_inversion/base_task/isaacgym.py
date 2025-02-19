@@ -47,6 +47,12 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
                 rb_shape_props[foot_shape.start].rolling_friction = ground_friction
                 rb_shape_props[foot_shape.start].torsion_friction = ground_friction
             self.gym.set_actor_rigid_shape_properties(env_ptr, 0, rb_shape_props)
+        if "mass_multiplier" in perturbations:
+            mass_multiplier = perturbations["mass_multiplier"]
+            rb_props = self.gym.get_actor_rigid_body_properties(env_ptr, 0)
+            for i in range(len(rb_props)):
+                rb_props[i].mass *= mass_multiplier
+            self.gym.set_actor_rigid_body_properties(env_ptr, 0, rb_props)
 
     def build_env_task(self, env_id, env_ptr, humanoid_asset):
         pass
