@@ -111,12 +111,13 @@ class BaseDisc(DiscHumanoid):  # type: ignore[misc]
         if len(self.reset_default_env_ids) > 0:
             self.reset_disc_hist_default(self.reset_default_env_ids)
 
-        if len(self.reset_ref_env_ids) > 0:
-            self.reset_disc_hist_ref(
-                self.reset_ref_env_ids,
-                self.reset_ref_motion_ids,
-                self.reset_ref_motion_times,
-            )
+        if self.state_init != self.StateInit.Default:
+            if len(self.reset_ref_env_ids) > 0:
+                self.reset_disc_hist_ref(
+                    self.reset_ref_env_ids,
+                    self.reset_ref_motion_ids,
+                    self.reset_ref_motion_times,
+                )
 
     def reset_disc_hist_default(self, env_ids):
         self.disc_hist_buf.set_hist(
