@@ -5,7 +5,7 @@ from typing import List
 
 
 def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only, record_video):
-    if prior_only and env_name not in ["inversion_strike", "inversion_long_jump"]:
+    if prior_only:
         checkpoints_arg = glob.glob(f"{base_dir}/{env_name}/*"
                                     f"_prior_True_text_False_current_pose_True_bigger_True_train_actor_False_0/"
                                     f"last.ckpt")[0]
@@ -66,7 +66,7 @@ def run_prior_only_evaluations():
     # record_video = True
     record_video = False
     output_dir = "eval_runs"
-    num_envs = 5 * 1024
+    num_envs = 4 * 1024
     # num_envs = 20
     games_per_env = 1
     # games_per_env = 5
@@ -74,7 +74,12 @@ def run_prior_only_evaluations():
     all_cmds = []
     for perturbation_name, perturbation_val in perturbations.items():
         for env_name in envs_names_list:
-            for prior_only in [True, False]:
+            for prior_only in [False, True]:
+                if prior_only and env_name in ["inversion_strike", "inversion_long_jump"]:
+                    continue
+                if perturbation_name == "complex_terrain" and env_name in ["inversion_strike", "inversion_long_jump"]:
+                    continue
+
                 checkpoints_arg = get_checkpoints_arg(base_dir, env_name, perturbation_name, prior_only, record_video)
 
                 project_name = "_".join(["FINAL_", env_name.replace('inversion_', '')])
