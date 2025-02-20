@@ -105,12 +105,18 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             dtype=torch.bool,
             device=self.device,
         )
-        new_mask[:, -1, 0] = True  # Heading
+        pelvis_body_index = self.config.masked_mimic_conditionable_bodies.index(
+            "Head"
+        )
+        new_mask[:, pelvis_body_index, 1] = True  # Rotation
         new_mask = (
             new_mask.view(num_envs, 1, single_step_mask_size)
             .expand(-1, self.config.masked_mimic_obs.num_future_steps, -1)
             .reshape(num_envs, -1)
         )
+
+        self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
+        self.masked_mimic_target_poses_masks[env_ids, :] = False
 
         self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
@@ -120,9 +126,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             )
         )
 
-        self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
-        self.masked_mimic_target_poses_masks[env_ids, :] = False
-        self.masked_mimic_target_poses_masks[env_ids[far_from_target], -1] = True
+        self.masked_mimic_target_poses_masks[env_ids[far_from_target], -2] = True
         self.motion_text_embeddings_mask[env_ids] = False
         # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
 
