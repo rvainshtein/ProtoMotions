@@ -56,33 +56,37 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
         headless = False
     else:
         headless = True
-    cmd = (
-        f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless={headless}"
-        f" +checkpoint={checkpoint} +device={gpu_id}"
-        f" +wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null"
-        f" +opt=[{','.join(opt)}]"
-        f" +env.config.log_output=False"
-        f" +base_dir={base_dir}"
-        f" ++num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
-        f" ++algo.config.eval_callbacks.export_video_cb.config.record_dir={config.record_dir}"
-        f" {more_options}"
+    cmd = []
+    cmd.extend(
+        [
+            f"python phys_anim/eval_agent.py +robot=smpl +backbone=isaacgym +headless={headless}",
+            f"+checkpoint={checkpoint} +device={gpu_id}",
+            f"+wandb.wandb_entity={config.wandb.entity} +wandb.wandb_project={config.wandb.project} +wandb.wandb_id=null",
+            f"+opt=[{','.join(opt)}]",
+            f"+env.config.log_output=False",
+            f"+base_dir={base_dir}",
+            f"++num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}",
+            f"{more_options}",
+        ]
     )
+    if config.record_video:
+        cmd.append(f"++algo.config.eval_callbacks.export_video_cb.config.record_dir={config.record_dir}")
     if config.termination:
-        cmd += " ++env.config.enable_height_termination=True"
+        cmd.append("++env.config.enable_height_termination=True")
 
     if config.log_eval_results:
-        cmd += " ++algo.config.log_eval_results=True"
+        cmd.append("++algo.config.log_eval_results=True")
     if config.use_perturbations:
         for key, value in config.perturbations.items():
             if key == "complex_terrain":
                 if value is True:
-                    cmd += (" +terrain=complex"
-                            # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, stepping, 
-                            # poles, flat]
-                            " +terrain.config.terrain_proportions=[0.3,0.25,0.2,0.2,0.05,0.,0.,0.]")
+                    cmd.extend(["+terrain=complex",
+                                # terrain types: [smooth slope, rough slope, stairs up, stairs down, discrete, stepping,
+                                # poles, flat]
+                                "+terrain.config.terrain_proportions=[0.3,0.25,0.2,0.2,0.05,0.,0.,0.]"])
 
             else:
-                cmd += f" ++env.config.perturbations.{key}={value}"
+                cmd.append(f"++env.config.perturbations.{key}={value}")
     return cmd
 
 
@@ -124,7 +128,7 @@ def main(config: DictConfig):
         gpu_id = next(gpu_cycle) if gpu_cycle else gpu_ids[0]
         cmd = build_command(config, checkpoint, gpu_id, base_dir)
 
-        cmd_print = Syntax(cmd, "bash", theme="monokai", line_numbers=False, word_wrap=True)
+        cmd_print = Syntax(' '.join(cmd), "bash", theme="monokai", line_numbers=False, word_wrap=True)
 
         if len(gpu_ids) == 1:
             console.print(f"[bold blue]Running sequentially on GPU {gpu_id}:[/bold blue]")
@@ -136,7 +140,7 @@ def main(config: DictConfig):
                 time.sleep(1)
             console.print(f"[bold blue]Running on GPU {gpu_id}:[/bold blue]")
             console.print(cmd_print)
-            processes.append(subprocess.Popen(cmd, shell=True))
+            processes.append(subprocess.Popen(' '.join(cmd), shell=True))
 
     # Wait for all remaining processes to finish
     for p in processes:
