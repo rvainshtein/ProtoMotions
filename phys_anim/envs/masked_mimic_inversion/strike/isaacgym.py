@@ -112,8 +112,9 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             .reshape(num_envs, -1)
         )
 
-        self.masked_mimic_target_poses[:] = (
+        self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
+                env_ids,
                 self.config.masked_mimic_obs.num_future_steps,
                 target_direction,
             )
@@ -123,11 +124,11 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         self.masked_mimic_target_poses_masks[env_ids, :] = False
         self.masked_mimic_target_poses_masks[env_ids[far_from_target], -1] = True
         self.motion_text_embeddings_mask[env_ids] = False
-        self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
+        # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
 
-        self.motion_text_embeddings_mask[env_ids] = False
-        self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
-        self.motion_text_embeddings[:] = self._text_embedding
+        # self.motion_text_embeddings_mask[env_ids] = False
+        # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
+        # self.motion_text_embeddings[:] = self._text_embedding
 
     def build_env(self, env_id, env_ptr, humanoid_asset):
         super().build_env(env_id, env_ptr, humanoid_asset)
@@ -301,11 +302,12 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           termination_heights,)
 
     def build_sparse_target_object_poses(
-        self, raw_future_times, target_directions
+        self, env_ids, raw_future_times, target_directions
     ):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
         """
+        num_envs = len(env_ids)
         if self.condition_body_part == "Head":
             target_height = 1.5
         elif self.condition_body_part == "Pelvis":
@@ -315,7 +317,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         num_future_steps = raw_future_times.shape[1]
 
-        motion_ids = self.motion_ids.unsqueeze(-1).tile([1, num_future_steps])
+        motion_ids = self.motion_ids[env_ids].unsqueeze(-1).tile([1, num_future_steps])
         flat_ids = motion_ids.view(-1)
 
         lengths = self.motion_lib.get_motion_length(flat_ids)
@@ -330,10 +332,10 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         current_state = self.get_bodies_state()
-        cur_gt, cur_gr = current_state.body_pos, current_state.body_rot
+        cur_gt, cur_gr = current_state.body_pos[env_ids], current_state.body_rot[env_ids]
         # First remove the height based on the current terrain, then remove the offset to get back to the ground-truth data position
         cur_gt[:, :, -1:] -= self.get_ground_heights(cur_gt[:, 0, :2]).view(
-            self.num_envs, 1, 1
+            num_envs, 1, 1
         )
         # cur_gt[..., :2] -= self.respawn_offset_relative_to_data.clone()[..., :2].view(self.num_envs, 1, 2)
 
@@ -343,23 +345,23 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         reshaped_target_pos = flat_target_pos.reshape(
-            self.num_envs, num_future_steps, -1, 3
+            num_envs, num_future_steps, -1, 3
         )
 
         flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
 
         reshaped_target_rot = flat_target_rot.reshape(
-            self.num_envs, num_future_steps, -1, 4
+            num_envs, num_future_steps, -1, 4
         )
-        reshaped_target_rot[:, :, body_part, :] = target_directions.unsqueeze(1)
+        reshaped_target_rot[:, :, :, :] = target_directions.unsqueeze(1).unsqueeze(1)
         flat_target_rot = reshaped_target_rot.reshape(flat_target_rot.shape)
         # override to set the target root parameters
 
         expanded_body_pos = cur_gt.unsqueeze(1).expand(
-            self.num_envs, num_future_steps, *cur_gt.shape[1:]
+            num_envs, num_future_steps, *cur_gt.shape[1:]
         )
         expanded_body_rot = cur_gr.unsqueeze(1).expand(
-            self.num_envs, num_future_steps, *cur_gr.shape[1:]
+            num_envs, num_future_steps, *cur_gr.shape[1:]
         )
 
         flat_cur_pos = expanded_body_pos.reshape(flat_target_pos.shape)
@@ -421,21 +423,21 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             flat_target_rel_body_pos, [0, 3], "constant", 0
         )
         sub_sampled_target_rel_body_pos = padded_flat_target_rel_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
 
         padded_flat_target_body_pos = torch.nn.functional.pad(
             flat_target_body_pos, [0, 3], "constant", 0
         )
         sub_sampled_target_body_pos = padded_flat_target_body_pos.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
 
         sub_sampled_target_rel_body_rot_obs = target_rel_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
         sub_sampled_target_body_rot_obs = target_body_rot_obs.reshape(
-            self.num_envs, num_future_steps, -1, 6
+            num_envs, num_future_steps, -1, 6
         )[:, :, self.masked_mimic_conditionable_bodies_ids]
 
         # Heading
@@ -461,7 +463,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             target_rel_vel, [0, 3], "constant", 0
         )
         padded_target_rel_vel = padded_target_rel_vel.reshape(
-            self.num_envs, num_future_steps, 1, 6
+            num_envs, num_future_steps, 1, 6
         )
 
         heading_and_velocity = torch.cat(
@@ -484,57 +486,58 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             ),
             dim=-1,
         )  # [batch, timesteps, joints, 24]
-        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(self.num_envs, -1)
+        obs = torch.cat((obs, heading_and_velocity), dim=-2).view(num_envs, -1)
 
         return obs
 
     def build_sparse_target_object_poses_masked_with_time(
-        self, num_future_steps, target_directions
+        self, env_ids, num_future_steps, target_directions
     ):
+        num_envs = len(env_ids)
         time_offsets = (
             torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
             * self.dt
         )
 
-        near_future_times = self.motion_times.unsqueeze(-1) + time_offsets.unsqueeze(0)
+        near_future_times = self.motion_times[env_ids].unsqueeze(-1) + time_offsets.unsqueeze(0)
         all_future_times = torch.cat(
-            [near_future_times, self.target_pose_time.view(-1, 1)], dim=1
+            [near_future_times, self.target_pose_time[env_ids].view(-1, 1)], dim=1
         )
 
         obs = self.build_sparse_target_object_poses(
-            all_future_times, target_directions
+            env_ids, all_future_times, target_directions
         ).view(
-            self.num_envs,
+            num_envs,
             num_future_steps + 1,
             self.masked_mimic_conditionable_bodies_ids.shape[0] + 1,
             2,
             12,
         )
 
-        near_mask = self.masked_mimic_target_bodies_masks.view(
-            self.num_envs, num_future_steps, self.num_conditionable_bodies, 2, 1
+        near_mask = self.masked_mimic_target_bodies_masks[env_ids].view(
+            num_envs, num_future_steps, self.num_conditionable_bodies, 2, 1
         )
-        far_mask = self.target_pose_joints.view(self.num_envs, 1, -1, 2, 1)
+        far_mask = self.target_pose_joints[env_ids].view(num_envs, 1, -1, 2, 1)
         mask = torch.cat([near_mask, far_mask], dim=1)
 
         masked_obs = obs * mask
 
         masked_obs_with_joints = torch.cat((masked_obs, mask), dim=-1).view(
-            self.num_envs, num_future_steps + 1, -1
+            num_envs, num_future_steps + 1, -1
         )
 
         times = all_future_times.view(-1).view(
-            self.num_envs, num_future_steps + 1, 1
-        ) - self.motion_times.view(self.num_envs, 1, 1)
+            num_envs, num_future_steps + 1, 1
+        ) - self.motion_times[env_ids].view(num_envs, 1, 1)
         ones_vec = torch.ones(
-            self.num_envs, num_future_steps + 1, 1, device=self.device
+            num_envs, num_future_steps + 1, 1, device=self.device
         )
         times_with_mask = torch.cat((times, ones_vec), dim=-1)
         combined_sparse_future_pose_obs = torch.cat(
             (masked_obs_with_joints, times_with_mask), dim=-1
         )
 
-        return combined_sparse_future_pose_obs.view(self.num_envs, -1)
+        return combined_sparse_future_pose_obs.view(num_envs, -1)
 
 
     def draw_task(self):
