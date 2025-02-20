@@ -116,7 +116,6 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
-        self.masked_mimic_target_poses_masks[env_ids, :] = False
 
         self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
@@ -126,6 +125,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             )
         )
 
+        self.masked_mimic_target_poses_masks[env_ids, :] = False
         self.masked_mimic_target_poses_masks[env_ids[far_from_target], -2] = True
         self.motion_text_embeddings_mask[env_ids] = False
         # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
@@ -455,7 +455,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                 self.w_last,
             ).view(-1, 4),
             self.w_last,
-        ).reshape(self.num_envs, num_future_steps, 1, 6)
+        ).reshape(num_envs, num_future_steps, 1, 6)
 
         # Velocity
         target_root_vel = flat_target_vel[:, 0, :]
