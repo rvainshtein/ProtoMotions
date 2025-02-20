@@ -5,7 +5,7 @@ from typing import List
 
 
 def get_checkpoints_arg(base_dir, env_name, perturbation, prior_only, record_video):
-    if prior_only:
+    if prior_only and env_name not in ["inversion_strike", "inversion_long_jump"]:
         checkpoints_arg = glob.glob(f"{base_dir}/{env_name}/*"
                                     f"_prior_True_text_False_current_pose_True_bigger_True_train_actor_False_0/"
                                     f"last.ckpt")[0]
@@ -32,9 +32,6 @@ def get_valid_reach_runs(base_dir: str, reach_runs_glob: str, other_env_runs_glo
     other_env_runs = glob.glob(os.path.join(base_dir, other_env_runs_glob))
     # get names of checkpoints in reach env
     reach_runs = glob.glob(os.path.join(base_dir, reach_runs_glob))
-    # the file paths look like this /something/reach_prior_False_text_False_current_pose_False_bigger_False_train_actor_False_0/last.ckpt
-    # and /something/direction_facing_prior_False_text_False_current_pose_True_bigger_True_train_actor_False_0/last.ckpt
-    # I want to get the names of runs in reach that appear in other env
     other_env = other_env_runs[0].split('_prior_')[0].split('/')[-1]
     other_env_runs_names = [run.split('/')[-2].replace(other_env + '_', '') for run in other_env_runs]
     reach_runs_names = [run.split('/')[-2].replace('reach_', '') for run in reach_runs]
@@ -48,14 +45,23 @@ def run_prior_only_evaluations():
     # cluster_base_dir = '/lustre/fsw/portfolios/nvr/users/ctessler/models/rons_2'
     cluster_base_dir = None
     # envs_names_list = ["inversion_steering", "inversion_direction_facing", "reach"]
-    envs_names_list = ["reach"]
-    # gpu_ids = [0, 1, 2, 3]
-    gpu_ids = [1, 2, 3]
+    # envs_names_list = ["reach"]
+    envs_names_list = [
+        "inversion_steering",
+        "inversion_direction_facing",
+        "reach",
+        "inversion_strike",
+        "inversion_long_jump"
+    ]
+    gpu_ids = [0, 1, 2, 3]
+    # gpu_ids = [1, 2, 3]
     termination = True
-    perturbations = {"None": None,
-                     "gravity_z": -15,
-                     "complex_terrain": True,
-                     "friction": 0.5,}
+    perturbations = {
+        "None": None,
+        "gravity_z": -15,
+        "complex_terrain": True,
+        "friction": 0.4,
+    }
     # perturbations = {"None": None}
     # record_video = True
     record_video = False
@@ -69,10 +75,9 @@ def run_prior_only_evaluations():
     for perturbation_name, perturbation_val in perturbations.items():
         for env_name in envs_names_list:
             for prior_only in [True, False]:
-            # for prior_only in [False]:
                 checkpoints_arg = get_checkpoints_arg(base_dir, env_name, perturbation_name, prior_only, record_video)
 
-                project_name = "_".join(["EVAL", env_name.replace('inversion_', '')])
+                project_name = "_".join(["FINAL_", env_name.replace('inversion_', '')])
 
                 if perturbation_name != "None":
                     project_name += f"_{perturbation_name}"
