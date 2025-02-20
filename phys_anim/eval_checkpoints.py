@@ -23,9 +23,9 @@ class WandbConfig:
 @dataclass
 class PerturbationsConfig:
     gravity_z: float = field(default=-9.81)
-    static_friction: float = field(default=1.0)
-    dynamic_friction: float = field(default=1.0)
+    friction: float = field(default=1.0)
     complex_terrain: bool = field(default=False)
+    mass_multiplier: dict = field(default_factory=lambda: {})
 
 
 @dataclass
@@ -43,6 +43,8 @@ class EvalConfig:
     use_perturbations: bool = field(default=False)
     perturbations: PerturbationsConfig = field(default_factory=lambda: PerturbationsConfig())
     record_video: bool = field(default=False)
+    record_dir: str = field(default="output/eval_videos")
+    termination: bool = field(default=False)
 
 
 def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: Path):
@@ -62,8 +64,12 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
         f" +env.config.log_output=False"
         f" +base_dir={base_dir}"
         f" ++num_envs={config.num_envs} +algo.config.num_games={config.num_envs * config.games_per_env}"
+        f" ++algo.config.eval_callbacks.export_video_cb.config.record_dir={config.record_dir}"
         f" {more_options}"
     )
+    if config.termination:
+        cmd += " ++env.config.enable_height_termination=True"
+
     if config.log_eval_results:
         cmd += " ++algo.config.log_eval_results=True"
     if config.use_perturbations:

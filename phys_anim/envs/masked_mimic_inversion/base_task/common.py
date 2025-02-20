@@ -37,10 +37,9 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     def __init__(self, config, device, motion_lib: Optional[MotionLib] = None):
         perturbations = config.get("perturbations", {})
         self.gravity_z = perturbations.get("gravity_z", -9.81)
-        if "static_friction" in perturbations:
-            config.simulator.plane.static_friction = perturbations["static_friction"]
-        if "dynamic_friction" in perturbations:
-            config.simulator.plane.dynamic_friction = perturbations["dynamic_friction"]
+        if "friction" in perturbations:
+            config.simulator.plane.static_friction = perturbations["friction"]
+            config.simulator.plane.dynamic_friction = perturbations["friction"]
 
         super().__init__(config, device, motion_lib=motion_lib)
         self.setup_task()
