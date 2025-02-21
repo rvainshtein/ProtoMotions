@@ -133,7 +133,7 @@ def main(config: DictConfig):
         if len(gpu_ids) == 1:
             console.print(f"[bold blue]Running sequentially on GPU {gpu_id}:[/bold blue]")
             console.print(cmd_print)
-            subprocess.run(cmd, shell=True)
+            subprocess.run(' '.join(cmd), shell=True)
         else:
             while len(processes) >= len(gpu_ids):
                 processes = [p for p in processes if p.poll() is None]  # Remove finished processes
