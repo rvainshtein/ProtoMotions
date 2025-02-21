@@ -111,11 +111,13 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         head_body_index = self.config.masked_mimic_conditionable_bodies.index(
             "Head"
         )
+        self.motion_times[:] = 0
         self.target_pose_time[:] = (
                 self.motion_times[:] + 1.0
         )
         new_mask[:, pelvis_body_index, :] = True  # Rotation
         new_mask[:, head_body_index, :] = True  # Rotation
+        new_mask[:, -1, :] = True  # Rotation
         new_mask = (
             new_mask.view(num_envs, 1, single_step_mask_size)
             .expand(-1, self.config.masked_mimic_obs.num_future_steps, -1)
@@ -123,10 +125,11 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
-        self.target_pose_obs_mask[:] = True
-        self.target_pose_joints[:] = False
-        self.target_pose_joints[:, pelvis_body_index * 2 + 1] = True
-        self.target_pose_joints[:, head_body_index * 2 + 1] = True
+        self.target_pose_obs_mask[env_ids[far_from_target]] = True
+        self.target_pose_obs_mask[env_ids[close_to_target]] = False
+        self.target_pose_joints[env_ids] = False
+        self.target_pose_joints[env_ids, pelvis_body_index * 2 + 1] = True
+        self.target_pose_joints[env_ids, head_body_index * 2 + 1] = True
 
         self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
@@ -138,7 +141,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         self.masked_mimic_target_poses_masks[env_ids, :] = False
-        self.masked_mimic_target_poses_masks[env_ids[far_from_target], 5:] = True
+        self.masked_mimic_target_poses_masks[env_ids[far_from_target], -2:] = True
         self.motion_text_embeddings_mask[env_ids] = False
         # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
 
@@ -358,7 +361,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         # turned_envs = ~turning_envs
         cur_pos = cur_gt[:, 0, :2]
-        tar_dir = target_positions - cur_pos
+        tar_dir = (target_positions - cur_pos) / torch.norm(target_positions - cur_pos, dim=-1, keepdim=True)
 
         reshaped_target_pos[:, :, :, :2] = cur_gt[:, 0, :2].unsqueeze(1).unsqueeze(1).clone()
         for frame_idx in range(num_future_steps):
