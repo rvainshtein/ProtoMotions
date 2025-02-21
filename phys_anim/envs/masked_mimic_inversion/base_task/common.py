@@ -47,16 +47,10 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.current_pose_obs_type = self.config.get("current_pose_obs_type", None)
 
         self._text_embedding = None
-        if self.config.get("use_text", False):
-            self.visible_text_embeddings_probs = (
-                torch.ones(config.num_envs, dtype=torch.float, device=device)
-            )
-            # override motion lib since we manually provide the text
-            self.motion_lib.state.has_text_embeddings[:] = True
-
-            self.text_command = self.config.get(
-                "text_command", "a person is walking upright"
-            )
+        self._recompute_text_embedding = False
+        self._using_text = self.config.get("use_text", False)
+        self.text_command = self.config.get("text_command", "a person is walking upright")
+        if self._using_text:
             text_embedding = get_text_embedding(
                 text_command=self.text_command, device=self.device
             )
@@ -142,17 +136,24 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.compute_priors(env_ids)
 
     def compute_priors(self, env_ids):
+        self._set_text_prior()
         if self.config.get("use_chens_prior", False):
             self.create_chens_prior(env_ids)
-        if self.config.get("use_text", False):
-            self.motion_text_embeddings_mask[:] = True
-            self.motion_text_embeddings[:] = self._text_embedding
-            # override motion lib since we manually provide the text
-            self.motion_lib.state.has_text_embeddings[:] = True
         if self.config.get("raise_hands", False):
             self.condition_type = "raise_hands"
             # self.create_extra_prior(env_ids)
             self.create_raise_hands_prior(env_ids)
+
+    def _set_text_prior(self):
+        if self._recompute_text_embedding:
+            self._text_embedding = get_text_embedding(self.text_command)
+        self.config.masked_mimic_masking.motion_text_embeddings_visible_prob = float(self._using_text)
+        self.visible_text_embeddings_probs[:] = (torch.ones(self.config.num_envs, dtype=torch.float, device=self.device)
+                                                 ) * float(self._using_text)
+        # override motion lib since we manually provide the text
+        self.motion_lib.state.has_text_embeddings[:] = self._using_text
+        self.motion_text_embeddings_mask[:] = self._using_text
+        self.motion_text_embeddings[:] = self._text_embedding
 
     def compute_humanoid_obs(self, env_ids=None):
         humanoid_obs = super().compute_humanoid_obs(env_ids)
@@ -177,7 +178,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.masked_mimic_target_bodies_masks[:] = False
         self.target_pose_obs_mask[:] = False
         self.object_bounding_box_obs_mask[:] = False
-        self.motion_text_embeddings_mask[:] = self.config.get("use_text", False)
+        self.motion_text_embeddings_mask[:] = self._using_text
 
     def update_task(self, actions):
         pass
