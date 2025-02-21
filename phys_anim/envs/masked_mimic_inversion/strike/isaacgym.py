@@ -106,9 +106,16 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             device=self.device,
         )
         pelvis_body_index = self.config.masked_mimic_conditionable_bodies.index(
+            "Pelvis"
+        )
+        head_body_index = self.config.masked_mimic_conditionable_bodies.index(
             "Head"
         )
-        new_mask[:, pelvis_body_index, 1] = True  # Rotation
+        self.target_pose_time[:] = (
+                self.motion_times[:] + 1.0
+        )
+        new_mask[:, pelvis_body_index, :] = True  # Rotation
+        new_mask[:, head_body_index, :] = True  # Rotation
         new_mask = (
             new_mask.view(num_envs, 1, single_step_mask_size)
             .expand(-1, self.config.masked_mimic_obs.num_future_steps, -1)
@@ -116,17 +123,22 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
+        self.target_pose_obs_mask[:] = True
+        self.target_pose_joints[:] = False
+        self.target_pose_joints[:, pelvis_body_index * 2 + 1] = True
+        self.target_pose_joints[:, head_body_index * 2 + 1] = True
 
         self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
                 env_ids,
                 self.config.masked_mimic_obs.num_future_steps,
                 target_direction,
+                tar_states[..., :2]
             )
         )
 
         self.masked_mimic_target_poses_masks[env_ids, :] = False
-        self.masked_mimic_target_poses_masks[env_ids[far_from_target], -2] = True
+        self.masked_mimic_target_poses_masks[env_ids[far_from_target], 5:] = True
         self.motion_text_embeddings_mask[env_ids] = False
         # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
 
@@ -306,19 +318,12 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           termination_heights,)
 
     def build_sparse_target_object_poses(
-        self, env_ids, raw_future_times, target_directions
+        self, env_ids, raw_future_times, target_directions, target_positions
     ):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
         """
         num_envs = len(env_ids)
-        if self.condition_body_part == "Head":
-            target_height = 1.5
-        elif self.condition_body_part == "Pelvis":
-            target_height = 0.9
-        else:
-            raise NotImplementedError
-
         num_future_steps = raw_future_times.shape[1]
 
         motion_ids = self.motion_ids[env_ids].unsqueeze(-1).tile([1, num_future_steps])
@@ -344,21 +349,42 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         # cur_gt[..., :2] -= self.respawn_offset_relative_to_data.clone()[..., :2].view(self.num_envs, 1, 2)
 
         # override to set the target root parameters
-        body_part = self.gym.find_asset_rigid_body_index(
-            self.humanoid_asset, self.condition_body_part
-        )
-
         reshaped_target_pos = flat_target_pos.reshape(
             num_envs, num_future_steps, -1, 3
         )
-
-        flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
-
         reshaped_target_rot = flat_target_rot.reshape(
             num_envs, num_future_steps, -1, 4
         )
-        reshaped_target_rot[:, :, :, :] = target_directions.unsqueeze(1).unsqueeze(1)
+
+        # turned_envs = ~turning_envs
+        cur_pos = cur_gt[:, 0, :2]
+        tar_dir = target_positions - cur_pos
+
+        reshaped_target_pos[:, :, :, :2] = cur_gt[:, 0, :2].unsqueeze(1).unsqueeze(1).clone()
+        for frame_idx in range(num_future_steps):
+            reshaped_target_pos[:, frame_idx, :, :2] += (
+                    tar_dir.view(num_envs, 1, 2)
+                    * self._tar_speed
+                    * (raw_future_times[:, frame_idx] - self.motion_times[env_ids]).unsqueeze(-1)
+            )
+
+        reshaped_target_pos[:, :, 0, -1] = 0.88  # standing up
+        reshaped_target_pos[:, :, 1:, -1] = 1.5  # standing up
+
+        # angle = rotations.vec_to_heading(self._tar_facing_dir)
+        reshaped_target_rot[:] = target_directions.view(num_envs, 1, 1, 4)
+
+        flat_target_pos = reshaped_target_pos.reshape(flat_target_pos.shape)
         flat_target_rot = reshaped_target_rot.reshape(flat_target_rot.shape)
+
+        non_flat_target_vel = flat_target_vel.reshape(
+            num_envs, num_future_steps, -1, 3
+        )
+
+        non_flat_target_vel[:, :, 0, :2] = (
+                tar_dir[:] * self._tar_speed
+        ).view(tar_dir.shape[0], 1, 2)
+        flat_target_vel = non_flat_target_vel.reshape(flat_target_vel.shape)
         # override to set the target root parameters
 
         expanded_body_pos = cur_gt.unsqueeze(1).expand(
@@ -495,7 +521,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         return obs
 
     def build_sparse_target_object_poses_masked_with_time(
-        self, env_ids, num_future_steps, target_directions
+        self, env_ids, num_future_steps, target_directions, target_position
     ):
         num_envs = len(env_ids)
         time_offsets = (
@@ -509,7 +535,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         obs = self.build_sparse_target_object_poses(
-            env_ids, all_future_times, target_directions
+            env_ids, all_future_times, target_directions, target_position
         ).view(
             num_envs,
             num_future_steps + 1,
