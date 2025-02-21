@@ -368,7 +368,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             reshaped_target_pos[:, frame_idx, :, :2] += (
                     tar_dir.view(num_envs, 1, 2)
                     * self._tar_speed
-                    * (raw_future_times[:, frame_idx] - self.motion_times[env_ids]).unsqueeze(-1)
+                    * (raw_future_times[:, frame_idx] - self.motion_times[env_ids]).view(num_envs, 1, 1)
             )
 
         reshaped_target_pos[:, :, 0, -1] = 0.88  # standing up
