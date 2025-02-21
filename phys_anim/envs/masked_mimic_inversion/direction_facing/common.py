@@ -66,7 +66,6 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             self.dt,
             self.w_last,
         )
-        self._prev_root_pos[:] = root_pos
 
         # print the target speed of the env and the speed actually achieved in that direction
 
@@ -87,6 +86,9 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         # need these at the end of every compute_reward function
         self.compute_failures_and_distances()
         self.accumulate_errors()
+        # It's important that it's here after calculation of failures and distances
+        self._prev_root_pos[:] = root_pos
+
 
     def compute_failures_and_distances(self):
         current_state = self.get_bodies_state()
@@ -94,12 +96,21 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             current_state.body_pos,
             current_state.body_rot,
         )
-        root_vel = self._prev_root_pos[:, :2] - body_pos[:, 0, :2]
-        tar_dir_vel = self._tar_dir[:] * self._tar_speed[:].unsqueeze(-1) * self.dt
-        tangent_vel = root_vel - tar_dir_vel
-        tangent_vel_error = torch.norm(tangent_vel, dim=-1)
         turning_envs = self._heading_turn_steps > self.progress_buf
         turned_envs = ~turning_envs
+
+        delta_root_pos = self.get_humanoid_root_states()[..., :3] - self._prev_root_pos[:]
+        root_vel = delta_root_pos / self.dt
+        tar_dir_speed = torch.sum(self._tar_dir * root_vel[..., :2], dim=-1)
+
+        tar_dir_vel = tar_dir_speed.unsqueeze(-1) * self._tar_dir[:]
+        tangent_vel = root_vel[..., :2] - tar_dir_vel
+
+        tangent_vel_error = torch.sum(tangent_vel, dim=-1)
+
+        tar_vel_err = self._tar_speed[:] - tar_dir_speed
+        tar_vel_err_rel = torch.where(self._tar_speed[:] > 1e-4, tar_vel_err / self._tar_speed[:], tar_vel_err)
+
         # Turn 3d rotation to flat heading quaternion
         facing_quat = torch_utils.calc_heading_quat(body_rot[:, 0], w_last=self.w_last)
         # Turn 2 vector to quaternion
@@ -111,15 +122,11 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         facing_err = quat_diff_norm(facing_quat, tar_facing_quat, self.w_last)
         facing_err_degrees = facing_err * 180 / torch.pi
 
-        tar_dir_speed = torch.sum(self._tar_dir * root_vel[..., :2], dim=-1)
-        tar_vel_err = self._tar_speed[:] - tar_dir_speed
-        tar_vel_err_rel = torch.where(self._tar_speed[:] > 1e-4, tar_vel_err / self._tar_speed[:], tar_vel_err)
+
 
         self._current_accumulated_errors[turned_envs] += tangent_vel_error[turned_envs]
-        self._current_failures[turned_envs] += (
-                                                       45 < facing_err_degrees[turned_envs]
-                                               ) | (facing_err_degrees[turned_envs] < -45) \
-                                               | (torch.abs(tar_vel_err_rel[turned_envs]) > 0.2)
+        self._current_failures[turned_envs] += torch.logical_or(torch.abs(facing_err_degrees[turned_envs]) > 45,
+                                                                torch.abs(tar_vel_err_rel[turned_envs]) > 0.2)
         self._current_failures[turning_envs] = 0
         self._current_accumulated_errors[turning_envs] = 0
         self._last_length[:] = self.progress_buf[:]
@@ -161,7 +168,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         self._tar_facing_dir[env_ids] = face_tar_dir
         self._tar_facing_dir_theta[env_ids] = face_dir_theta
 
-        self._heading_turn_steps[env_ids] = (30 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
+        self._heading_turn_steps[env_ids] = (80 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
 
     def create_chens_prior(self, env_ids):
         turning_envs = self.progress_buf < 0
