@@ -104,6 +104,7 @@ def run_prior_only_evaluations():
                     f"+use_perturbations={use_perturbation}",
                     f"+record_video={record_video}",
                     f"+termination={termination}",
+                    f"+record_dir={record_dir}",
                 ]
                 if perturbation_name != "None":
                     cmd.append(f"+perturbations.{perturbation_name}={perturbation_val}")
