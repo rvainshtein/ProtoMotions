@@ -94,7 +94,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         )
 
         distance_to_target = torch.norm(dir_to_target, dim=-1)
-        close_to_target = distance_to_target < 1
+        close_to_target = distance_to_target < 2
         far_from_target = ~close_to_target
 
         single_step_mask_size = self.num_conditionable_bodies * 2
@@ -115,22 +115,26 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         self.target_pose_time[:] = (
                 self.motion_times[:] + 1.0
         )
-        new_mask[:, pelvis_body_index, :] = True  # Rotation
-        new_mask[:, head_body_index, :] = True  # Rotation
-        new_mask[:, -1, :] = True  # Rotation
+        new_mask[:, pelvis_body_index, :] = True  # translation + rotation
+        new_mask[:, head_body_index, :] = True  # translation + rotation
+        new_mask[:, -1, :] = True  # velocity + rotation
         new_mask = (
             new_mask.view(num_envs, 1, single_step_mask_size)
             .expand(-1, self.config.masked_mimic_obs.num_future_steps, -1)
             .reshape(num_envs, -1)
         )
 
+        # Set the mask, needed here since obs = [maskedmimic_obs * masks]
         self.masked_mimic_target_bodies_masks[env_ids, :] = new_mask
+        # Define the mask for the "far away pose"
         self.target_pose_obs_mask[env_ids[far_from_target]] = True
         self.target_pose_obs_mask[env_ids[close_to_target]] = False
+        # Set the "far away pose" constraints
         self.target_pose_joints[env_ids] = False
         self.target_pose_joints[env_ids, pelvis_body_index * 2 + 1] = True
         self.target_pose_joints[env_ids, head_body_index * 2 + 1] = True
 
+        # Compute MM obs
         self.masked_mimic_target_poses[env_ids] = (
             self.build_sparse_target_object_poses_masked_with_time(
                 env_ids,
@@ -140,9 +144,21 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             )
         )
 
+        # Set the transformer masks
         self.masked_mimic_target_poses_masks[env_ids, :] = False
         self.masked_mimic_target_poses_masks[env_ids[far_from_target], -2:] = True
         self.motion_text_embeddings_mask[env_ids] = False
+
+        # Envs that succeeded --> remove constraint.
+        tar_pos = self._target_states[env_ids, :3]
+        tar_rot = self._target_states[env_ids, 3:7]
+        up = torch.zeros_like(tar_pos)
+        up[..., -1] = 1
+        tar_up = quat_rotate(tar_rot, up, w_last=self.w_last)
+        tar_rot_err = torch.sum(up * tar_up, dim=-1)
+        succ = tar_rot_err < 0.2
+        self.masked_mimic_target_poses_masks[env_ids[succ], :] = False
+
         # self.motion_text_embeddings_mask[env_ids[close_to_target]] = True
 
         # self.motion_text_embeddings_mask[env_ids] = False
