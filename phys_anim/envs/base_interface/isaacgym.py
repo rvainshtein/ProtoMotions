@@ -134,7 +134,7 @@ class GymBaseInterface(BaseInterface, Humanoid):  # type: ignore[misc]
             sim_params.up_axis = gymapi.UP_AXIS_Z
             sim_params.gravity.x = 0
             sim_params.gravity.y = 0
-            sim_params.gravity.z = self.gravity_z
+            sim_params.gravity.z = getattr(self, "gravity_z", -9.81)
             return 2
         return 1
 
