@@ -145,6 +145,9 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
             self.create_raise_hands_prior(env_ids)
 
     def _set_text_prior(self):
+
+        self.historical_pose_obs_mask[:] = True
+
         if self._recompute_text_embedding:
             self._text_embedding = get_text_embedding(self.text_command)
         self.config.masked_mimic_masking.motion_text_embeddings_visible_prob = float(self._using_text)
