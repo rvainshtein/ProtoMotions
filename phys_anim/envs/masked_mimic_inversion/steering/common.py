@@ -99,7 +99,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             self.reset_heading_task(rest_env_ids)
 
     def reset_heading_task(self, env_ids):
-        if len(env_ids) > 0:
+        if len(env_ids) > 0 and (
+                type(self) is MaskedMimicBaseDirection or 'MaskedMimicDirectionHumanoid' in str(type(self))):
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
             active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
                     (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
@@ -115,6 +116,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             self._failures.extend(
                 (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
             )
+            # for the last episode, we need to accumulate the errors
+            self.accumulate_errors()
             self._current_failures[env_ids] = 0
 
         n = len(env_ids)

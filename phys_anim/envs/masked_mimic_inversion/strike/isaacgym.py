@@ -222,6 +222,9 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
             self._failures.extend(
                 (self._current_successes[env_ids][active_envs] == 0).cpu().tolist()
             )
+            # for the last episode, we need to accumulate the errors
+            self.accumulate_errors()
+
             self._current_successes[env_ids] = 0
             self._reset_strike_target(env_ids)
         super().reset_task(env_ids)

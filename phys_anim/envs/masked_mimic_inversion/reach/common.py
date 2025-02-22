@@ -85,6 +85,8 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
             self._failures.extend(
                 (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
             )
+            # for the last episode, we need to accumulate the errors
+            self.accumulate_errors()
             self._current_failures[env_ids] = 0
 
         super().reset_task(env_ids)

@@ -149,6 +149,9 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             self._failures.extend(
                 (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
             )
+            # for the last episode, we need to accumulate the errors
+            self.accumulate_errors()
+
             self._current_failures[env_ids] = 0
 
         n = len(env_ids)
