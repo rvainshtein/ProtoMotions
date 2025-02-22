@@ -153,7 +153,6 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
             self.accumulate_errors()
 
             self._current_failures[env_ids] = 0
-
         n = len(env_ids)
         if np.random.binomial(1, self._random_heading_probability):
             face_dir_theta = 2 * torch.pi * torch.rand(n, device=self.device) - torch.pi

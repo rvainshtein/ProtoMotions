@@ -46,8 +46,10 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
 
     @torch.no_grad()
     def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
-        all_env_ids = torch.arange(self.num_envs, device=self.device)
-        self.env.reset_envs(all_env_ids)
+        if not self.actor.training:
+            all_env_ids = torch.arange(self.num_envs, device=self.device)
+            reset_ids = all_env_ids[self.env.progress_buf == self.env.config.max_episode_length - 1]
+            self.env.reset_envs(reset_ids)
         self.eval()
         results = getattr(self.env, 'results')
         if len(results) > 0:
