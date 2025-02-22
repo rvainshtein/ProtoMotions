@@ -153,7 +153,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         # override motion lib since we manually provide the text
         self.motion_lib.state.has_text_embeddings[:] = self._using_text
         self.motion_text_embeddings_mask[:] = self._using_text
-        self.motion_text_embeddings[:] = self._text_embedding
+        if self._using_text:
+            self.motion_text_embeddings[:] = self._text_embedding
 
     def compute_humanoid_obs(self, env_ids=None):
         humanoid_obs = super().compute_humanoid_obs(env_ids)
