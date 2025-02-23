@@ -1,3 +1,4 @@
+import glob
 import os
 import random
 import subprocess
@@ -7,6 +8,8 @@ from typing import List
 import pandas as pd
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+
 from tqdm import tqdm
 
 import subprocess
@@ -78,8 +81,8 @@ def save_gifs_and_order(GIF_FOLDER, video_pairs):
     # Save label mappings
     os.makedirs(GIF_FOLDER, exist_ok=True)
     # === Step 2: Convert Videos to GIFs ===
-    for i, (env, selected_algos, video_paths, labels) in enumerate(tqdm(video_pairs)):
-        gif_filename = f"Q_{i}__{env}__{'__'.join(selected_algos)}.gif"
+    for i, (env, selected_algos, video_paths, labels) in enumerate(tqdm(video_pairs, desc="Creating GIFs")):
+        gif_filename = f"Q_{i + 1}__{env}__{'_'.join(selected_algos)}.gif"
         gif_path = os.path.join(GIF_FOLDER, gif_filename)
         create_gif(video_paths, labels, gif_path)
 
@@ -119,7 +122,7 @@ def create_form(video_pairs, environments_description, SERVICE_ACCOUNT_FILE, SCO
     # Add questions
     questions = []
     for i, (env, selected_algos, video_paths, labels) in enumerate(video_pairs):
-        question_text = f"Q {i}: Which example looks more human-like for **{environments_description[env]}**?"
+        question_text = f"Q {i}: Which example looks more human-like for task **{environments_description[env]}**?"
         questions.append(
             {
                 "title": question_text,
@@ -161,9 +164,43 @@ def create_form(video_pairs, environments_description, SERVICE_ACCOUNT_FILE, SCO
     print(f"Edit permissions granted to {YOUR_EMAIL}")
 
 
+def upload_gifs_to_drive(GIF_FOLDER, DRIVE_FOLDER_ID, SERVICE_ACCOUNT_FILE, SCOPES):
+    credentials = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES
+    )
+
+    drive_service = build("drive", "v3", credentials=credentials)
+
+    gif_paths = glob.glob(os.path.join(GIF_FOLDER, "*.gif"))
+    for gif_path in tqdm(gif_paths, desc="Uploading GIFs"):
+        upload_to_drive(gif_path, DRIVE_FOLDER_ID, drive_service)
+
+    print("GIFs uploaded to Google Drive successfully!")
+
+
+def upload_to_drive(file_path, drive_folder_id, drive_service):
+    file_metadata = {
+        "name": os.path.basename(file_path),
+        "parents": [drive_folder_id]
+    }
+
+    media = MediaFileUpload(file_path, mimetype="image/gif")  # Correct MediaFileUpload usage
+
+    file = drive_service.files().create(body=file_metadata, media_body=media).execute()
+
+    # Make file public
+    drive_service.permissions().create(
+        fileId=file["id"],
+        body={"role": "reader", "type": "anyone"}
+    ).execute()
+
+    return f"https://drive.google.com/uc?id={file['id']}"
+
+
 def main():
     # ==== CONFIG ====
-    VIDEO_FOLDER = "../output/recordings/final_recordings"  # Folder containing input videos
+    # VIDEO_FOLDER = "../../output/FINALLY_"  # Folder containing input videos
+    VIDEO_FOLDER = "../../output/old_FINALLY_"  # Folder containing input videos
     GIF_FOLDER = "gifs_new"  # Folder to save GIFs
     OUTPUT_CSV = "shuffled_labels.csv"  # Track label order
     QUESTION_NUM = 2  # Number of questions per environment
@@ -171,6 +208,8 @@ def main():
 
     SCOPES = ["https://www.googleapis.com/auth/forms.body", "https://www.googleapis.com/auth/drive.file"]
     SERVICE_ACCOUNT_FILE = "service_account_secret.json"
+
+    DRIVE_FOLDER_ID = "1r241VD5rwHhrigHtF56LQC2c3FgwhkER"  # Folder to upload GIFs to
 
     MAIN_ALGORITHMS = [
         "MaskedMimic_Inversion_Prior_False",
@@ -184,8 +223,8 @@ def main():
         "MaskedMimic_Inversion_Prior_False": "prior_True_text_False_current_pose_True_bigger_True_train_actor_False",
         "AMP": "disable_discriminator_False",
         "PPO": "disable_discriminator_True",
-        # PULSE: ""
-        # "MaskedMimic_Prior_Only": ""
+        "PULSE": "pulse",
+        "MaskedMimic_Prior_Only": "prior_True_text_False_current_pose_True_bigger_True_train_actor_True_prior_only"
     }
 
     environments = [
@@ -208,6 +247,8 @@ def main():
                                                            environments, OUTPUT_CSV)
 
     save_gifs_and_order(GIF_FOLDER, video_pairs)
+
+    upload_gifs_to_drive(GIF_FOLDER, DRIVE_FOLDER_ID, SERVICE_ACCOUNT_FILE, SCOPES)
 
     # === Step 3: Create Google Form ===
     create_form(video_pairs, environments_description, SERVICE_ACCOUNT_FILE, SCOPES, YOUR_EMAIL="rvainshtein@gmail.com")
