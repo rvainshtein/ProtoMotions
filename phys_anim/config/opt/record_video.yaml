@@ -25,11 +25,15 @@ algo:
 env:
   config:
     camera:
-      pos: [1.75, -1.75, 1]
-      pitch_deg: 20
+      supersampling_vertical: 2
+      supersampling_horizontal: 2
+      horizontal_fov: 62.0
+      far_plane: 20000.0
+      pos: [ 1.73, -1.73, 0.77 ]  # Move closer
+      pitch_deg: 28        # Slightly look down more
       roll_deg: 0
-      yaw_deg: 135
+      yaw_deg: 140          # Slightly adjust yaw
       rotate_with_agent: False
-      width: 852
-      height: 480
+      width: 420            # Smaller resolution
+      height: 360           # Smaller resolution
     export_video: True
