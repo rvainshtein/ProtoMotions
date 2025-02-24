@@ -42,6 +42,7 @@ from phys_anim.envs.masked_mimic_inversion.base_task.isaacgym import (
 class MaskedMimicStrike(MaskedMimicTaskHumanoid):
     def __init__(self, config, device: torch.device, motion_lib: Optional[torch.Tensor] = None):
         super().__init__(config=config, device=device)
+        self.enable_success_termination = getattr(self.config.strike_params, "enable_success_termination", False)
         if not self.headless:
             self._build_marker_state_tensors()
 
@@ -330,14 +331,17 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         termination_heights = self.termination_heights + self.get_ground_heights(
             bodies_positions[:, self.head_body_id, :2])
-        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(self.reset_buf, self.progress_buf,
-                                                                          self.contact_forces,
+        tar_pos = self._target_states[..., 0:3]
+        tar_rot = self._target_states[..., 3:7]
+        self.reset_buf[:], self.terminate_buf[:] = compute_humanoid_reset(tar_pos, tar_rot, self.reset_buf,
+                                                                          self.progress_buf, self.contact_forces,
                                                                           self.non_termination_contact_body_ids,
                                                                           self.rigid_body_pos, self._tar_contact_forces,
                                                                           self._strike_body_ids,
                                                                           self.config.max_episode_length,
                                                                           self.config.enable_height_termination,
-                                                                          termination_heights,)
+                                                                          termination_heights,
+                                                                          self.enable_success_termination)
 
     def build_sparse_target_object_poses(
         self, env_ids, raw_future_times, target_directions, target_positions
@@ -680,13 +684,14 @@ def compute_strike_reward(tar_pos, tar_rot, root_state, prev_root_pos, dt, tar_s
 
 
 @torch.jit.script
-def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids, rigid_body_pos,
-                           tar_contact_forces,
-                           strike_body_ids, max_episode_length, enable_early_termination, termination_heights):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor) -> Tuple[Tensor, Tensor]
+def compute_humanoid_reset(tar_pos, tar_rot, reset_buf, progress_buf, contact_buf, non_termination_contact_body_ids,
+                           rigid_body_pos, tar_contact_forces, strike_body_ids, max_episode_length,
+                           enable_early_termination, termination_heights, enable_success_termination):
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, bool, Tensor, bool) -> Tuple[Tensor, Tensor]
     contact_force_threshold = 1.0
 
     terminated = torch.zeros_like(reset_buf)
+    success = torch.zeros_like(reset_buf)
 
     if enable_early_termination:
         masked_contact_buf = contact_buf.clone()
@@ -718,6 +723,18 @@ def compute_humanoid_reset(reset_buf, progress_buf, contact_buf, non_termination
         has_failed *= (progress_buf > 1)
         terminated = torch.where(has_failed, torch.ones_like(reset_buf), terminated)
 
-    reset = torch.where(progress_buf >= max_episode_length - 1, torch.ones_like(reset_buf), terminated)
+        # Define success condition: target falls
+        up = torch.zeros_like(tar_pos)
+        up[..., -1] = 1
+        tar_up = quat_rotate(tar_rot, up, w_last=True)
+        tar_rot_err = torch.sum(up * tar_up, dim=-1)
+        success = tar_rot_err < 0.2
+        success *= (progress_buf > 1)
+
+        if not enable_success_termination:
+            success = torch.zeros_like(success)
+
+    combined_reset = success | (progress_buf >= max_episode_length - 1) | terminated
+    reset = torch.where(combined_reset.to(torch.bool), torch.ones_like(reset_buf), reset_buf)
 
     return reset, terminated

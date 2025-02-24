@@ -257,11 +257,12 @@ class PPO:
         if self.config.normalize_values:
             self.running_val_norm.load_state_dict(state_dict["running_val_norm"])
 
-        self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"], strict=False)
-        self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"], strict=False)
+        if self.actor.training:
+            self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"], strict=False)
+            self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"], strict=False)
 
-        # Handle missing episode_env_tensors for older checkpoints
-        self.episode_env_tensors.load_state_dict(state_dict.get("episode_env_tensors", {}))
+            # Handle missing episode_env_tensors for older checkpoints
+            self.episode_env_tensors.load_state_dict(state_dict.get("episode_env_tensors", {}))
 
     def fit(self):
         self.env_reset()
@@ -906,7 +907,13 @@ class PPO:
     def calc_eval_metrics(self) -> Tuple[Dict, Optional[float]]:
         if not self.actor.training:
             all_env_ids = torch.arange(self.num_envs, device=self.device)
-            reset_ids = all_env_ids[self.env.progress_buf == self.env.config.max_episode_length - 1]
+            if getattr(self.env, "_current_successes", None) is not None:
+                # success based environment
+                success_mask = self.env._current_successes.to(bool)
+            else:
+                success_mask = torch.zeros_like(all_env_ids)
+            end_episode_mask = self.env.progress_buf == self.env.config.max_episode_length - 1
+            reset_ids = all_env_ids[success_mask | end_episode_mask]
             self.env.reset_envs(reset_ids)
         self.eval()
         results = getattr(self.env, 'results')
