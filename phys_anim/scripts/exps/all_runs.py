@@ -179,6 +179,8 @@ def generate_cmd(base_dir, cluster_base_dir, env_name, games_per_env, gpu_ids, n
     ]
     if perturbation_name != "None":
         cmd.append(f"+perturbations.{perturbation_name}={perturbation_val}")
+    if record_video:
+        cmd.append(f"+opt=[better_viz]")
     return cmd
 
 
