@@ -1507,6 +1507,15 @@ class Humanoid(BaseHumanoid, GymBaseInterface):  # type: ignore[misc]
         camera_offset = gymapi.Vec3(*camera_config.pos)
         camera_props.enable_tensors = True
 
+        camera_props.supersampling_vertical = camera_config.get("supersampling_vertical",
+                                                                camera_props.supersampling_vertical)
+        camera_props.supersampling_horizontal = camera_config.get("supersampling_horizontal",
+                                                                  camera_props.supersampling_horizontal)
+        camera_props.far_plane = camera_config.get("far_plane",
+                                                   camera_props.far_plane)
+        camera_props.horizontal_fov = camera_config.get("horizontal_fov",
+                                                        camera_props.horizontal_fov)
+
         pitch = np.deg2rad(camera_config.pitch_deg)
         roll = np.deg2rad(camera_config.roll_deg)
         yaw = np.deg2rad(camera_config.yaw_deg)
