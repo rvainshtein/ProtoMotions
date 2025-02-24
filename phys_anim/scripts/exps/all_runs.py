@@ -9,8 +9,9 @@ import numpy as np
 def get_checkpoints_arg(base_dir, env_name, prior_only, record_video, record_seed=0, run_all_reach=True):
     seed_str = f"_{record_seed}" if record_video else ""
     if prior_only:
+        # seed_str doesn't matter here, but it's easier to keep it
         checkpoints_arg = glob.glob(f"{base_dir}/{env_name}/*"
-                                    f"_prior_True_text_False_current_pose_True_bigger_True_train_actor_False_0/"
+                                    f"_prior_True_text_False_current_pose_True_bigger_True_train_actor_False{seed_str}/"
                                     f"last.ckpt")[0]
         checkpoints_arg = f"+checkpoint_paths=[{checkpoints_arg}]"
 
@@ -124,6 +125,20 @@ def generate_eval_checkpoints_bash():
     # record_dir = None
     # #
 
+    # RE-RUN strike + long_jump
+    output_file = "rerun_steering_direction_facing"
+    perturbations = {"None": None}
+    record_video = False
+    num_envs = 1 * 1024
+    games_per_env = 1
+    gpu_ids = [0, 1, 2, 3]
+    termination = True
+    project_prefix = "FINALLY_"
+    envs_names_list = ["inversion_strike", "inversion_long_jump"]
+    record_dir = None
+    output_file = "rerun_strike_long_jump"
+    #
+
     out_dir = 'all_runs'
     os.makedirs(out_dir, exist_ok=True)
     all_cmds = []
@@ -145,8 +160,11 @@ def generate_eval_checkpoints_bash():
                                    record_video, termination, run_all_reach=run_all_reach, record_seed=record_seed)
                 # subprocess.run(cmd, check=True)
                 all_cmds.append(' '.join(cmd))
-    with open(os.path.join(out_dir, f'{output_file}_{"record_" if record_video else ""}.sh'), 'w') as f:
+    full_output_path = os.path.join(out_dir, f'{output_file}_{"record_" if record_video else ""}.sh')
+    with open(full_output_path, 'w') as f:
         f.write('\n'.join(all_cmds))
+    print(f"Generated {len(all_cmds)} commands")
+    print(f"Output file: {full_output_path}")
 
 
 def generate_cmd(base_dir, cluster_base_dir, env_name, games_per_env, gpu_ids, num_envs, perturbation_name,
@@ -235,9 +253,11 @@ def generate_perturbations_bash():
                                    record_video, termination, run_all_reach=run_all_reach, record_seed=record_seed)
                 all_cmds.append(' '.join(cmd))
 
-    with open(os.path.join(out_dir, f'{output_file}_{"record_" if record_video else ""}.sh'), 'w') as f:
+    full_output_path = os.path.join(out_dir, f'{output_file}_{"record_" if record_video else ""}.sh')
+    with open(full_output_path, 'w') as f:
         f.write('\n'.join(all_cmds))
-
+    print(f"Generated {len(all_cmds)} commands")
+    print(f"Output file: {full_output_path}")
 
 if __name__ == '__main__':
     generate_eval_checkpoints_bash()

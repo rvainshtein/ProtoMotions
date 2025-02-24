@@ -73,7 +73,8 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
         cmd.append(f"++algo.config.eval_callbacks.export_video_cb.config.record_dir={config.record_dir}")
     if config.termination:
         cmd.append("++env.config.enable_height_termination=True")
-
+        if 'strike' in str(checkpoint):
+            cmd.append("++env.config.enable_success_termination=True")
     if config.log_eval_results:
         cmd.append("++algo.config.log_eval_results=True")
     cmd.append(f"++use_perturbations={config.use_perturbations}")
