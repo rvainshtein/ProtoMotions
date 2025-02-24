@@ -76,6 +76,7 @@ def build_command(config: DictConfig, checkpoint: Path, gpu_id: int, base_dir: P
 
     if config.log_eval_results:
         cmd.append("++algo.config.log_eval_results=True")
+    cmd.append(f"++use_perturbations={config.use_perturbations}")
     if config.use_perturbations:
         for key, value in config.perturbations.items():
             if key == "complex_terrain":
@@ -109,6 +110,7 @@ def main(config: DictConfig):
 
     if config.record_video:
         config.opt.append("record_video")
+        config.opt = [opt for opt in config.opt if opt != "wdb"]
     if config.prior_only:
         print("Using prior only, make sure checkpoint is an inversion model.")
         config.opt.append("masked_mimic/inversion/disable_inversion_obs")
