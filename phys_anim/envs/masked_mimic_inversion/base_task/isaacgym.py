@@ -35,7 +35,7 @@ class MaskedMimicTaskHumanoid(BaseMaskedMimicTask, MaskedMimicHumanoid):  # type
 
     def set_perturbations(self, env_ptr):
         perturbations = self.config.get("perturbations", {})
-        if "friction" in perturbations:
+        if "friction" in perturbations.keys():
             ground_friction = perturbations["friction"]
             foot_names = ["L_Ankle", "R_Ankle", "L_Toe", "R_Toe"]
             foot_handles = [self.gym.find_actor_rigid_body_handle(env_ptr, 0, name) for name in foot_names]
