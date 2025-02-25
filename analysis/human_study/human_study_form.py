@@ -64,7 +64,7 @@ def create_video_comparisons(MAIN_ALGORITHMS, N, QUESTION_NUM, VIDEO_FOLDER, alg
             labels = []
             for i, algo in enumerate(selected_algos):
                 index = random.randint(1, 10)
-                video_path = os.path.join(VIDEO_FOLDER, f"{env}_{algorithms[algo]}_0", f"{index}.mp4")
+                video_path = os.path.join(VIDEO_FOLDER, f"{env}_{algorithms[algo]}_2", f"{index}.mp4")
                 if os.path.exists(video_path):
                     video_paths.append(video_path)
                     labels.append(chr(65 + i))  # A, B, C
