@@ -15,6 +15,9 @@ from tqdm import tqdm
 import subprocess
 from typing import List
 
+from analysis.human_study.assets import form_description, MAIN_ALGORITHMS, algorithms, environments_info, \
+    SERVICE_ACCOUNT_FILE, SCOPES
+
 
 def add_label_to_video(input_video: str, label: str, output_video: str) -> None:
     """Adds a text label at the top-left corner of a video and trims it to 10 seconds."""
@@ -50,44 +53,57 @@ def video_to_gif(input_video: str, output_gif: str, fps=30) -> None:
     subprocess.run(cmd, check=True, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
 
 
-def create_video_comparisons(MAIN_ALGORITHMS, N, QUESTION_NUM, VIDEO_FOLDER, algorithms, environments_info, OUTPUT_CSV):
-    video_pairs = []
-    shuffling_info = []
+def create_video_comparisons(MAIN_ALGORITHMS: List[str], N: int, QUESTIONS_PER_ENV: int, VIDEO_FOLDER: str,
+                             algorithms: dict, environments_info: dict, OUTPUT_CSV: str) -> pd.DataFrame:
+    """Creates video comparisons, shuffling algorithms and videos, and saves to a DataFrame."""
+    video_data = []
+
     for env, info in environments_info.items():
-        for _ in range(QUESTION_NUM):
+        for _ in range(QUESTIONS_PER_ENV):
             main_algo = random.choice([x for x in MAIN_ALGORITHMS if x in info['algorithms']])
             other_algos = random.sample([a for a in info['algorithms'] if a not in MAIN_ALGORITHMS], N - 1)
             selected_algos = [main_algo] + other_algos
             random.shuffle(selected_algos)
 
-            video_paths = []
+            question_videos = []
             labels = []
+
             for i, algo in enumerate(selected_algos):
                 index = random.randint(1, 10)
                 video_path = os.path.join(VIDEO_FOLDER, f"{env}_{algorithms[algo]}_2", f"{index}.mp4")
                 if os.path.exists(video_path):
-                    video_paths.append(video_path)
+                    question_videos.append(video_path)
                     labels.append(chr(65 + i))  # A, B, C
                 else:
                     print(f"Video not found: {video_path}")
 
-            shuffling_info.append([env] + selected_algos + labels)
-            video_pairs.append((env, selected_algos, video_paths, labels))
-    columns = ["Environment"] + [f"Algo{i}" for i in range(N)] + [f"Label{i}" for i in range(N)]
-    pd.DataFrame(shuffling_info,
-                 columns=columns).to_csv(
-        OUTPUT_CSV, index=True)
-    return shuffling_info, video_pairs
+            if len(question_videos) == N:
+                video_data.append({
+                    'env': env,
+                    'algorithms': selected_algos,
+                    'labels': labels,
+                    'video_paths': question_videos
+                })
+
+    video_df = pd.DataFrame(video_data)
+    video_df.to_csv(OUTPUT_CSV, index=False)
+    return video_df
 
 
-def save_gifs_and_order(GIF_FOLDER, video_pairs):
-    # Save label mappings
+def save_gifs_and_order(GIF_FOLDER: str, video_df: pd.DataFrame) -> None:
+    """Saves GIFs and orders them based on the DataFrame."""
     os.makedirs(GIF_FOLDER, exist_ok=True)
-    # === Step 2: Convert Videos to GIFs ===
-    for i, (env, selected_algos, video_paths, labels) in enumerate(tqdm(video_pairs, desc="Creating GIFs")):
-        gif_filename = f"Q_{i + 1}__{env}__{'_'.join(selected_algos)}.gif"
-        gif_path = os.path.join(GIF_FOLDER, gif_filename)
-        create_gif(video_paths, labels, gif_path)
+    question_idx = 1
+    for env_idx, (env, group) in tqdm(enumerate(video_df.groupby('env', sort=False)),
+                                      total=len(video_df['env'].unique()),
+                                      desc="Creating GIFs for each environment", position=0):
+        for i, question_info in tqdm(group.iterrows(),
+                                     total=len(group),
+                                     desc=f"Creating GIFs for {env}", position=1, leave=False):
+            gif_filename = f"Q_{question_idx}__{env}__{'_'.join(question_info['algorithms'])}.gif"
+            gif_path = os.path.join(GIF_FOLDER, gif_filename)
+            create_gif(question_info['video_paths'], question_info['labels'], gif_path)
+            question_idx += 1
 
 
 def create_gif(video_paths: List[str], labels: List[str], output_gif: str) -> None:
@@ -109,60 +125,67 @@ def create_gif(video_paths: List[str], labels: List[str], output_gif: str) -> No
         video_to_gif(concatenated_video, output_gif)
 
 
-def create_form(video_pairs, environments_info, SERVICE_ACCOUNT_FILE, SCOPES, YOUR_EMAIL):
-    credentials = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES
-    )
-
-    # Create Google Forms API service
+def create_form(video_df: pd.DataFrame, environments_info: dict, service_account_file: str, scopes: list,
+                your_email: str, questions_per_env: int):
+    # Authenticate and create the Google Forms API service
+    credentials = service_account.Credentials.from_service_account_file(service_account_file, scopes=scopes)
     forms_service = build("forms", "v1", credentials=credentials)
 
     # Create an empty form
-    form_metadata = {"info": {"title": "Human Study: Video Comparisons"}}
+    form_metadata = {"info": {"title": "Humanoid Control: Video Comparisons"}}
     form = forms_service.forms().create(body=form_metadata).execute()
     form_id = form["formId"]
 
-    # Add questions in pages of 15
-    questions = []
-    for i, (env, selected_algos, video_paths, labels) in enumerate(video_pairs):
-        if i % 15 == 0:
-            # Create a new page for every 15 questions
-            page_break = {
-                "title": f"Page {i // 15 + 1}",
-                "pageBreakItem": {}
-            }
-            questions.append(page_break)
+    # Update form description
+    _update_form_description(form_id, forms_service)
 
-        question_text = \
-            f"Q {i + 1}: Which example looks more human-like for task **{environments_info[env]['description']}**?"
-        questions.append(
-            {
+    # Initialize the list to hold form items
+    form_items = []
+
+    # Group the DataFrame by environment
+    grouped = video_df.groupby('env', sort=False)
+
+    question_num = 1
+    for env_idx, (env, group) in enumerate(grouped):
+        # Add a page break for each environment
+        page_break = {
+            "title": environments_info[env]["page_title"],
+            "pageBreakItem": {}
+        }
+        form_items.append(page_break)
+
+        # Iterate over the grouped DataFrame in chunks of 'questions_per_env'
+        for question_idx, (_, row) in enumerate(group.iterrows()):
+            question_text = f"Q {question_num}: Which example looks more human-like for task **{environments_info[env]['description']}**?"
+            question_item = {
                 "title": question_text,
                 "questionItem": {
                     "question": {
                         "required": True,
                         "choiceQuestion": {
                             "type": "RADIO",
-                            "options": [{"value": label} for label in labels],
+                            "options": [{"value": label} for label in row['labels']],
                         },
                     }
                 },
             }
-        )
+            form_items.append(question_item)
+            question_num += 1
 
+    # Prepare the batch update request
     update_request = {
-        "requests": [{"createItem": {"item": q, "location": {"index": i}}} for i, q in enumerate(questions)]
+        "requests": [{"createItem": {"item": item, "location": {"index": idx}}} for idx, item in enumerate(form_items)]
     }
+
+    # Execute the batch update
     forms_service.forms().batchUpdate(formId=form_id, body=update_request).execute()
 
-    # Create Google Drive API service
+    # Share the form with the specified email
     drive_service = build("drive", "v3", credentials=credentials)
-
-    # Share the form with your email
     permission = {
         "type": "user",
         "role": "writer",
-        "emailAddress": YOUR_EMAIL
+        "emailAddress": your_email
     }
     drive_service.permissions().create(
         fileId=form_id,
@@ -173,7 +196,23 @@ def create_form(video_pairs, environments_info, SERVICE_ACCOUNT_FILE, SCOPES, YO
     form_url = f"https://docs.google.com/forms/d/{form_id}/edit"
     print("Form updated successfully!")
     print("Form URL:", form_url)
-    print(f"Edit permissions granted to {YOUR_EMAIL}")
+    print(f"Edit permissions granted to {your_email}")
+
+
+def _update_form_description(form_id, forms_service):
+    description_update_request = {
+        "requests": [
+            {
+                "updateFormInfo": {
+                    "info": {
+                        "description": form_description
+                    },
+                    "updateMask": "description"
+                }
+            }
+        ]
+    }
+    forms_service.forms().batchUpdate(formId=form_id, body=description_update_request).execute()
 
 
 def upload_gifs_to_drive(GIF_FOLDER, DRIVE_FOLDER_ID, SERVICE_ACCOUNT_FILE, SCOPES):
@@ -209,108 +248,54 @@ def upload_to_drive(file_path, drive_folder_id, drive_service):
     return f"https://drive.google.com/uc?id={file['id']}"
 
 
-def main():
+def create_gifs_and_form(drive_folder_id, gif_folder, main_algorithms, n, output_csv, questions_per_env, scopes,
+                         service_account_file, video_folder, algorithms, environments_info):
+    video_df = create_video_comparisons(main_algorithms, n, questions_per_env, video_folder,
+                                        algorithms,
+                                        environments_info, output_csv)
+    save_gifs_and_order(gif_folder, video_df)
+    upload_gifs_to_drive(gif_folder, drive_folder_id, service_account_file, scopes)
+    # === Step 3: Create Google Form ===
+    create_form(video_df, environments_info, service_account_file, scopes, your_email="rvainshtein@gmail.com",
+                questions_per_env=questions_per_env)
+
+
+def create_single_form():
     # ==== CONFIG ====
     VIDEO_FOLDER = "../../output/FINALLY_"  # Folder containing input videos
     # VIDEO_FOLDER = "../../output/old_FINALLY_"  # Folder containing input videos
     GIF_FOLDER = "gifs_new"  # Folder to save GIFs
     OUTPUT_CSV = "shuffled_labels.csv"  # Track label order
-    QUESTIONS_PER_ENV = 15  # Number of questions per environment
+    QUESTIONS_PER_ENV = 8  # Number of questions per environment
     N = 3  # Number of total algorithms per question (1 main + N-1 others)
+    # DRIVE_FOLDER_ID = "1r241VD5rwHhrigHtF56LQC2c3FgwhkER"  # Folder to upload GIFs to
+    DRIVE_FOLDER_ID = "1CMnGcjvKBMj3Vh2igRSMEUMCfIIovUt1"  # Folder to upload GIFs to
+    create_gifs_and_form(DRIVE_FOLDER_ID, GIF_FOLDER, MAIN_ALGORITHMS, N, OUTPUT_CSV, QUESTIONS_PER_ENV, SCOPES,
+                         SERVICE_ACCOUNT_FILE, VIDEO_FOLDER, algorithms, environments_info)
 
-    SCOPES = ["https://www.googleapis.com/auth/forms.body", "https://www.googleapis.com/auth/drive.file"]
-    SERVICE_ACCOUNT_FILE = "service_account_secret.json"
 
-    DRIVE_FOLDER_ID = "1r241VD5rwHhrigHtF56LQC2c3FgwhkER"  # Folder to upload GIFs to
+def create_multi_form():
+    # ==== CONFIG ====
+    VIDEO_FOLDER = "../../output/FINALLY_"  # Folder containing input videos
+    OUT_DIR = "final_human_study"
+    os.makedirs(OUT_DIR, exist_ok=True)
+    NUM_FORMS = 3
+    GIF_FOLDERS = [os.path.join(OUT_DIR, f"gifs_new_form{i}") for i in range(NUM_FORMS)]  # Folder to save GIFs
+    OUTPUT_CSVS = [os.path.join(OUT_DIR, f"shuffled_labels_form{i}.csv") for i in range(NUM_FORMS)]  # Track label order
+    QUESTIONS_PER_ENV = 8  # Number of questions per environment
+    N = 3  # Number of total algorithms per question (1 main + N-1 others)
+    DRIVE_FOLDER_IDS = ["13CcgPu53yNxFOSs0SqNLFMDOzfkNRmDN",  # form 1
+                        "1ENIJRHawmYaA-Fe_dnYaG_MM0_m5Xw6o",  # form 2
+                        "1YhLZNm_LBxRUa0Sv6NZM3Mx-p2lHYDsm"]  # form 3
 
-    MAIN_ALGORITHMS = [
-        "MaskedMimic_Inversion_Prior_False",
-        "MaskedMimic_Inversion_Prior_True",
-    ]
+    for GIF_FOLDER, OUTPUT_CSV, DRIVE_FOLDER_ID in zip(GIF_FOLDERS, OUTPUT_CSVS, DRIVE_FOLDER_IDS):
+        create_gifs_and_form(DRIVE_FOLDER_ID, GIF_FOLDER, MAIN_ALGORITHMS, N, OUTPUT_CSV, QUESTIONS_PER_ENV, SCOPES,
+                             SERVICE_ACCOUNT_FILE, VIDEO_FOLDER, algorithms, environments_info)
 
-    algorithms = {
-        "MaskedMimic_FineTune_Prior_True": "prior_True_text_False_current_pose_True_bigger_True_train_actor_True",
-        "MaskedMimic_FineTune_Prior_False": "prior_False_text_False_current_pose_True_bigger_True_train_actor_True",
-        "MaskedMimic_Inversion_Prior_True": "prior_True_text_False_current_pose_True_bigger_True_train_actor_False",
-        "MaskedMimic_Inversion_Prior_False": "prior_False_text_False_current_pose_True_bigger_True_train_actor_False",
-        "AMP": "disable_discriminator_False",
-        "PPO": "disable_discriminator_True",
-        "PULSE": "pulse",
-        "MaskedMimic_Prior_Only": "prior_True_text_False_current_pose_True_bigger_True_train_actor_False_prior_only"
-    }
 
-    environments_info = {
-        "steering": {
-            "description": "walking in red direction",
-            "algorithms": [
-                "MaskedMimic_FineTune_Prior_True",
-                "MaskedMimic_FineTune_Prior_False",
-                "MaskedMimic_Inversion_Prior_True",
-                "MaskedMimic_Inversion_Prior_False",
-                "AMP",
-                "PPO",
-                "PULSE",
-                "MaskedMimic_Prior_Only"
-            ]
-        },
-        "direction_facing": {
-            "description": "walking in red direction, looking at the blue direction",
-            "algorithms": [
-                "MaskedMimic_FineTune_Prior_True",
-                "MaskedMimic_FineTune_Prior_False",
-                "MaskedMimic_Inversion_Prior_True",
-                "MaskedMimic_Inversion_Prior_False",
-                "AMP",
-                "PPO",
-                "PULSE",
-                "MaskedMimic_Prior_Only"
-            ]
-        },
-        "reach": {
-            "description": "reaching for the dot",
-            "algorithms": [
-                "MaskedMimic_FineTune_Prior_True",
-                "MaskedMimic_FineTune_Prior_False",
-                "MaskedMimic_Inversion_Prior_True",
-                "MaskedMimic_Inversion_Prior_False",
-                "AMP",
-                "PPO",
-                "PULSE",
-                "MaskedMimic_Prior_Only"
-            ]
-        },
-        "strike": {
-            "description": "walking and hitting the target",
-            "algorithms": [
-                "MaskedMimic_FineTune_Prior_False",
-                "MaskedMimic_Inversion_Prior_False",
-                "AMP",
-                "PPO",
-                "PULSE"
-            ]
-        },
-        "long_jump": {
-            "description": "running and jumping",
-            "algorithms": [
-                "MaskedMimic_FineTune_Prior_False",
-                "MaskedMimic_Inversion_Prior_False",
-                "AMP",
-                "PPO",
-                "PULSE"
-            ]
-        }
-    }
-
-    shuffling_info, video_pairs = create_video_comparisons(MAIN_ALGORITHMS, N, QUESTIONS_PER_ENV, VIDEO_FOLDER,
-                                                           algorithms,
-                                                           environments_info, OUTPUT_CSV)
-
-    save_gifs_and_order(GIF_FOLDER, video_pairs)
-
-    upload_gifs_to_drive(GIF_FOLDER, DRIVE_FOLDER_ID, SERVICE_ACCOUNT_FILE, SCOPES)
-
-    # === Step 3: Create Google Form ===
-    create_form(video_pairs, environments_info, SERVICE_ACCOUNT_FILE, SCOPES, YOUR_EMAIL="rvainshtein@gmail.com")
+def main():
+    create_multi_form()
+    # create_single_form()
 
 
 if __name__ == '__main__':
