@@ -46,7 +46,10 @@ def generate_raw_csvs(project_prefix='FINAL__', entity='phys_inversion', filters
         df.to_csv(f"{project_prefix}/raw/{project.name}.csv", index=False)
 
 
-def generate_grouped_csvs(project_prefix='FINALLY__', perturbation_types=(), metrics_rename_dict=None):
+def generate_grouped_csvs(project_prefix='FINALLY__', perturbation_types=(), metrics_rename_dict=None,
+                          group_by_keys=None):
+    if group_by_keys is None:
+        group_by_keys = ["algo_type", "prior", "use_perturbations"]
     if metrics_rename_dict is None:
         metrics_rename_dict = {}
     raw_csvs_paths = os.listdir(f"{project_prefix}/raw")
@@ -75,9 +78,9 @@ def generate_grouped_csvs(project_prefix='FINALLY__', perturbation_types=(), met
         df = df[df.any(axis=1)]
 
         perturbation_config_keys = [f'env.config.perturbations.{perturb_type}' for perturb_type in perturbation_types]
-        df_grouped = df.groupby(["algo_type", "prior", "use_perturbations", *perturbation_config_keys],
+        df_grouped = df.groupby(group_by_keys + perturbation_config_keys,
                                 dropna=False).agg(
-            {"reach_success": ["mean", "std"]})
+            {"reach_success": ["mean", np.std]})
         df_grouped.columns = ["_".join(col).strip() for col in df_grouped.columns.to_flat_index()]
         df_grouped.reset_index(inplace=True)
 
@@ -250,19 +253,87 @@ def generate_combined_perturb_df(grouped_dir, perturbation_types=('gravity_z', '
     return df
 
 
-def create_beam_plot(df, x_col, y_col, std_col, title, x_label, y_label):
+def create_beam_plot(df, x_col, y_col, std_col, title, x_label, y_label, names_order, color_discrete_map=None):
+    import plotly.graph_objects as go
+
+    # Define a better colormap if none is provided
+    if color_discrete_map is None:
+        # Professional color palette with good contrast
+        colors = [
+            '#1f77b4',  # Blue
+            '#ff7f0e',  # Orange
+            '#2ca02c',  # Green
+            '#d62728',  # Red
+            '#9467bd',  # Purple
+            '#8c564b',  # Brown
+            '#e377c2',  # Pink
+            '#7f7f7f',  # Gray
+            '#bcbd22',  # Olive
+            '#17becf'  # Teal
+        ]
+
+        # Create a color map based on unique algorithms
+        unique_algos = df['pretty_name'].unique() if 'pretty_name' in df.columns else df['algo_str'].unique()
+        color_discrete_map = {algo: colors[i % len(colors)] for i, algo in enumerate(unique_algos)}
+
+    # Process algorithms in the exact order specified by names_order
+    # This ensures the legend appears in the correct order
     fig = go.Figure()
 
-    for algo in df['algo_str'].unique():
+    # First process only the algorithms that are in names_order
+    for pretty_name in names_order:
+        # Find the corresponding algo_str
+        if 'pretty_name' in df.columns:
+            algo_matches = df[df['pretty_name'] == pretty_name]['algo_str'].unique()
+            if len(algo_matches) > 0:
+                algo = algo_matches[0]
+            else:
+                continue
+        else:
+            # If pretty_name column doesn't exist, assume names_order contains algo_str
+            if pretty_name in df['algo_str'].unique():
+                algo = pretty_name
+            else:
+                continue
+
         algo_df = df[df['algo_str'] == algo]
+
+        # Skip if no data
+        if len(algo_df) == 0:
+            continue
+
+        # Get color from color map
+        color = color_discrete_map.get(pretty_name, None)
+
+        # Create a transparent version of the same color for fill
+        if color:
+            # Parse the color to RGB format
+            if color.startswith('#'):
+                # Convert hex to rgb
+                r = int(color[1:3], 16)
+                g = int(color[3:5], 16)
+                b = int(color[5:7], 16)
+                fill_color = f'rgba({r}, {g}, {b}, 0.2)'
+            elif color.startswith('rgb'):
+                # Convert rgb to rgba
+                rgb_values = color.replace('rgb(', '').replace(')', '').split(',')
+                fill_color = f'rgba({rgb_values[0].strip()}, {rgb_values[1].strip()}, {rgb_values[2].strip()}, 0.2)'
+            else:
+                # Default transparent color
+                fill_color = 'rgba(0, 0, 0, 0.1)'
+        else:
+            fill_color = 'rgba(0, 0, 0, 0.1)'
 
         # Add the mean line
         fig.add_trace(go.Scatter(
             x=algo_df[x_col],
             y=algo_df[y_col],
-            mode='lines',
-            name=algo,
-            line=dict(width=2)
+            mode='lines+markers',
+            name=pretty_name,
+            line=dict(width=2, color=color),
+            marker=dict(size=6, color=color),
+            legendgroup=pretty_name,
+            legendrank=names_order.index(pretty_name)
         ))
 
         # Add the upper bound of the std
@@ -271,8 +342,9 @@ def create_beam_plot(df, x_col, y_col, std_col, title, x_label, y_label):
             y=algo_df[y_col] + algo_df[std_col],
             fill=None,
             mode='lines',
-            line=dict(width=0),
-            showlegend=False
+            line=dict(width=0, color=color),
+            showlegend=False,
+            legendgroup=pretty_name
         ))
 
         # Add the lower bound of the std
@@ -281,8 +353,81 @@ def create_beam_plot(df, x_col, y_col, std_col, title, x_label, y_label):
             y=algo_df[y_col] - algo_df[std_col],
             fill='tonexty',
             mode='lines',
-            line=dict(width=0),
-            showlegend=False
+            line=dict(width=0, color=color),
+            fillcolor=fill_color,
+            showlegend=False,
+            legendgroup=pretty_name
+        ))
+
+    # Process any remaining algorithms that weren't in names_order
+    for algo in df['algo_str'].unique():
+        algo_df = df[df['algo_str'] == algo]
+
+        # Get pretty name
+        if 'pretty_name' in algo_df.columns:
+            pretty_name = algo_df['pretty_name'].iloc[0]
+        else:
+            pretty_name = algo
+
+        # Skip if already processed
+        if pretty_name in names_order:
+            continue
+
+        # Get color from color map
+        color = color_discrete_map.get(pretty_name, None)
+
+        # Create a transparent version of the same color for fill
+        if color:
+            # Parse the color to RGB format
+            if color.startswith('#'):
+                # Convert hex to rgb
+                r = int(color[1:3], 16)
+                g = int(color[3:5], 16)
+                b = int(color[5:7], 16)
+                fill_color = f'rgba({r}, {g}, {b}, 0.2)'
+            elif color.startswith('rgb'):
+                # Convert rgb to rgba
+                rgb_values = color.replace('rgb(', '').replace(')', '').split(',')
+                fill_color = f'rgba({rgb_values[0].strip()}, {rgb_values[1].strip()}, {rgb_values[2].strip()}, 0.2)'
+            else:
+                # Default transparent color
+                fill_color = 'rgba(0, 0, 0, 0.1)'
+        else:
+            fill_color = 'rgba(0, 0, 0, 0.1)'
+
+        # Add the mean line
+        fig.add_trace(go.Scatter(
+            x=algo_df[x_col],
+            y=algo_df[y_col],
+            mode='lines+markers',
+            name=pretty_name,
+            line=dict(width=2, color=color),
+            marker=dict(size=6, color=color),
+            legendgroup=pretty_name,
+            legendrank=len(names_order) + 1  # Put at the end
+        ))
+
+        # Add the upper bound of the std
+        fig.add_trace(go.Scatter(
+            x=algo_df[x_col],
+            y=algo_df[y_col] + algo_df[std_col],
+            fill=None,
+            mode='lines',
+            line=dict(width=0, color=color),
+            showlegend=False,
+            legendgroup=pretty_name
+        ))
+
+        # Add the lower bound of the std
+        fig.add_trace(go.Scatter(
+            x=algo_df[x_col],
+            y=algo_df[y_col] - algo_df[std_col],
+            fill='tonexty',
+            mode='lines',
+            line=dict(width=0, color=color),
+            fillcolor=fill_color,
+            showlegend=False,
+            legendgroup=pretty_name
         ))
 
     fig.update_layout(
@@ -295,15 +440,34 @@ def create_beam_plot(df, x_col, y_col, std_col, title, x_label, y_label):
         plot_bgcolor='white',
         paper_bgcolor='white',
         font=dict(color='black'),
-        xaxis=dict(title='% Change from Baseline Gravity', tickvals=[0.5, 1, 2]),
-        yaxis=dict(gridcolor='black'),
+        xaxis=dict(
+            showgrid=True,
+            gridcolor='lightgray',
+            ticks='outside',
+            ticklen=4,
+            tickwidth=1,
+            showline=True,
+            linecolor='black',
+            mirror=True
+        ),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='lightgray',
+            ticks='outside',
+            ticklen=4,
+            tickwidth=1,
+            showline=True,
+            linecolor='black',
+            mirror=True
+        ),
         legend=dict(
             orientation='h',
             yanchor='bottom',
             y=-0.2,
             xanchor='center',
-            x=0.5
-        )
+            x=0.5,
+            itemsizing='constant'
+        ),
+        # margin=dict(l=50, r=50, t=50, b=50),  # Tight layout
     )
-
-    fig.show()
+    return fig
