@@ -7,7 +7,7 @@ import numpy as np
 
 
 def get_checkpoints_arg(base_dir, env_name, prior_only, record_video, record_seed=0, run_all_reach=True):
-    seed_str = f"_{record_seed}" if record_video else ""
+    seed_str = get_seed_str(record_seed, record_video, prior_only)
     if prior_only:
         # seed_str doesn't matter here, but it's easier to keep it
         checkpoints_arg = glob.glob(f"{base_dir}/{env_name}/*"
@@ -22,8 +22,14 @@ def get_checkpoints_arg(base_dir, env_name, prior_only, record_video, record_see
     return checkpoints_arg
 
 
+def get_seed_str(record_seed, record_video, prior_only):
+    if record_video or prior_only:
+        return f"_{record_seed}"
+    return ""
+
+
 def get_reach_checkpoints_arg(base_dir, env_name, record_seed, record_video, run_all_reach):
-    seed_str = f"_{record_seed}" if record_video else ""
+    seed_str = get_seed_str(record_seed, record_video, prior_only=False)
     if run_all_reach:
         checkpoints_arg = f"+checkpoint_paths_glob={base_dir}/{env_name}{seed_str}/*/last.ckpt"
     else:
@@ -232,14 +238,15 @@ def generate_perturbations_bash():
 
     # PERTURBATIONS
     gravity_log_space = np.array([[0.25, 0.4, 0.6, 0.75, 1, 1.15, 1.3, 1.5, 1.6, 1.75, 2]]) * -9.81
-    friction_log_space = np.linspace(0.5, 2, 11)
+    friction_log_space = np.linspace(0.1, 1, 11)
     gravity_perturbations = [("gravity_z", round(gravity_val, 2)) for gravity_val in gravity_log_space.flatten()]
     friction_perturbations = [("friction", round(friction_val, 2)) for friction_val in friction_log_space.flatten()]
-    perturbations = gravity_perturbations + friction_perturbations
-    gpu_ids = [0, 1, 2, 3]
-    project_prefix = "PERTURB_"
+    perturbations = friction_perturbations + gravity_perturbations
+    gpu_ids = [0, 1, 2]
+    project_prefix = "PERTURBATIONS_"
+    termination = False
     envs_names_list = ["inversion_direction_facing"]
-    output_file = "perturb_eval_runs"
+    output_file = "perturb_eval_runs_new"
     #
 
     out_dir = 'all_runs'
@@ -258,6 +265,7 @@ def generate_perturbations_bash():
         f.write('\n'.join(all_cmds))
     print(f"Generated {len(all_cmds)} commands")
     print(f"Output file: {full_output_path}")
+
 
 if __name__ == '__main__':
     generate_eval_checkpoints_bash()
