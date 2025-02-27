@@ -99,8 +99,8 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
             self.reset_heading_task(rest_env_ids)
 
     def reset_heading_task(self, env_ids):
-        if len(env_ids) > 0 and (
-                type(self) is MaskedMimicBaseDirection or 'MaskedMimicDirectionHumanoid' in str(type(self))):
+        is_direction = type(self) is MaskedMimicBaseDirection or 'MaskedMimicDirectionHumanoid' in str(type(self))
+        if len(env_ids) > 0 and is_direction:
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
             active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
                     (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
@@ -163,7 +163,9 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._tar_dir_theta[env_ids] = dir_theta
         self._tar_dir[env_ids] = tar_dir
         self._heading_change_steps[env_ids] = self.progress_buf[env_ids] + change_steps
-
+        # TODO: should be this
+        # if is_direction:
+        #     self._heading_turn_steps[env_ids] = 60 * 1 + self.progress_buf[env_ids]
         self._heading_turn_steps[env_ids] = 60 * 1 + self.progress_buf[env_ids]
 
     def compute_task_obs(self, env_ids=None):

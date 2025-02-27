@@ -118,6 +118,7 @@ def main(override_config: OmegaConf):
 
     algo: PPO = instantiate(config.algo, env=env, fabric=fabric)
     algo.setup()
+    algo.actor.eval()
     algo.load(config.checkpoint)
 
     algo.evaluate_policy()

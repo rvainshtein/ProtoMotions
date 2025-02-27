@@ -83,6 +83,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.results = {}
         self.console = Console()
 
+        self._terminate_buf_copy = torch.zeros_like(self.terminate_buf)
+
     def accumulate_errors(self):
         self.last_unscaled_rewards = self.log_dict
 
@@ -121,9 +123,11 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     # Handle reset
     ###############################################################
     def reset_envs(self, env_ids):
+        self._terminate_buf_copy[:] = self.terminate_buf.clone()
         super().reset_envs(env_ids)
         if len(env_ids) > 0:
             self.reset_task(env_ids)
+            self._terminate_buf_copy[env_ids] = 0
 
     def reset_task(self, env_ids):
         # Make sure in user-control mode that the history isn't visible.
@@ -192,7 +196,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Parameter", style="dim")
         table.add_column("Value", justify="right")
-        table.add_row("Step", f"{self.progress_buf.item():.3f}")
+        table.add_row("Step", f"{self.progress_buf.item():.0f}")
         table.add_row("Reward", f"{self.rew_buf.item():.3f}")
         if getattr(self, "_current_successes", None) is not None:
             table.add_row("Success Rate", f"{self._current_successes.sum().item():.3f}")
