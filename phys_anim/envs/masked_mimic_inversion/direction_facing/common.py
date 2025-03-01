@@ -133,11 +133,13 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
 
     def reset_heading_task(self, env_ids):
         super().reset_heading_task(env_ids)
+        self._heading_turn_steps[env_ids] = (80 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
         if len(env_ids) > 0:
             # Make sure the test has started + agent started from a valid position (if it failed, then it's not valid)
-            active_envs = (self._current_accumulated_errors[env_ids] > 0) & (
-                    (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0
-            )
+            measurement_started = (self._current_accumulated_errors[env_ids] > 0) & (
+                    (self._last_length[env_ids] - self._heading_turn_steps[env_ids]) > 0)
+            terminated = self._terminate_buf_copy[env_ids].to(bool) & (self._last_length[env_ids] > 0)
+            active_envs = measurement_started | terminated
             average_distances = self._current_accumulated_errors[env_ids][
                                     active_envs
                                 ] / (
@@ -146,9 +148,8 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
                                 )
             self._distances.extend(average_distances.cpu().tolist())
             self._current_accumulated_errors[env_ids] = 0
-            self._failures.extend(
-                (self._current_failures[env_ids][active_envs] > 0).cpu().tolist()
-            )
+            self._current_failures[env_ids[terminated]] += 1
+            self._failures.extend((self._current_failures[env_ids][active_envs] > 0).cpu().tolist())
             # for the last episode, we need to accumulate the errors
             self.accumulate_errors()
 
@@ -170,7 +171,8 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
         self._tar_facing_dir[env_ids] = face_tar_dir
         self._tar_facing_dir_theta[env_ids] = face_dir_theta
 
-        self._heading_turn_steps[env_ids] = (80 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
+        # TODO: this has no effect here. should be at the start of the function, after super() call or fix in direction env
+        # self._heading_turn_steps[env_ids] = (80 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
 
     def create_chens_prior(self, env_ids):
         turning_envs = self.progress_buf < 0
