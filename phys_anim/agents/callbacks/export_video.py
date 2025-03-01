@@ -39,7 +39,8 @@ import cv2
 
 SUFFIX_TO_FOURCC = {
     "webm": "vp80",
-    "mp4": "MP4V",
+    # "mp4": "MP4V",
+    "mp4": "FMP4",
 }
 
 

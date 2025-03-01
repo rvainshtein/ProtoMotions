@@ -110,7 +110,7 @@ def generate_eval_checkpoints_bash():
     record_video = True
     num_envs = 20
     games_per_env = 1
-    gpu_ids = [0, 1]
+    gpu_ids = [0]
     record_dir = "output/FINALLY_"
     termination = False
     record_seed = 2
@@ -131,19 +131,31 @@ def generate_eval_checkpoints_bash():
     # record_dir = None
     # #
 
-    # RE-RUN strike + long_jump
-    output_file = "rerun_steering_direction_facing"
+    # # RE-RUN strike + long_jump
+    # output_file = "rerun_steering_direction_facing"
+    # perturbations = {"None": None}
+    # record_video = False
+    # num_envs = 1 * 1024
+    # games_per_env = 1
+    # gpu_ids = [0, 1, 2, 3]
+    # termination = True
+    # project_prefix = "FINALLY_"
+    # envs_names_list = ["inversion_strike", "inversion_long_jump"]
+    # record_dir = None
+    # output_file = "rerun_strike_long_jump"
+    # #
+
+    # LAST MINUTE
+    output_file = "last_minute"
     perturbations = {"None": None}
     record_video = False
     num_envs = 1 * 1024
     games_per_env = 1
+    project_prefix = "LASTMIN"
     gpu_ids = [0, 1, 2, 3]
-    termination = True
-    project_prefix = "FINALLY_"
-    envs_names_list = ["inversion_strike", "inversion_long_jump"]
-    record_dir = None
-    output_file = "rerun_strike_long_jump"
-    #
+    envs_names_list = ["last_minute"]
+    termination = False
+
 
     out_dir = 'all_runs'
     os.makedirs(out_dir, exist_ok=True)
@@ -237,16 +249,39 @@ def generate_perturbations_bash():
     record_seed = 0
 
     # PERTURBATIONS
-    gravity_log_space = np.array([[0.25, 0.4, 0.6, 0.75, 1, 1.15, 1.3, 1.5, 1.6, 1.75, 2]]) * -9.81
-    friction_log_space = np.linspace(0.1, 1, 11)
-    gravity_perturbations = [("gravity_z", round(gravity_val, 2)) for gravity_val in gravity_log_space.flatten()]
-    friction_perturbations = [("friction", round(friction_val, 2)) for friction_val in friction_log_space.flatten()]
-    perturbations = friction_perturbations + gravity_perturbations
-    gpu_ids = [0, 1, 2]
+    # gravity_log_space = np.array([[0.25, 0.4, 0.6, 0.75, 1, 1.15, 1.3, 1.5, 1.6, 1.75, 2]]) * -9.81
+    # friction_log_space = np.linspace(0.1, 1, 11)
+    # gravity_perturbations = [("gravity_z", round(gravity_val, 2)) for gravity_val in gravity_log_space.flatten()]
+    # friction_perturbations = [("friction", round(friction_val, 2)) for friction_val in friction_log_space.flatten()]
+    # perturbations = friction_perturbations + gravity_perturbations
+    # gpu_ids = [0, 1, 2]
+    # project_prefix = "PERTURBATIONS_"
+    # termination = False
+    # envs_names_list = ["inversion_direction_facing"]
+    # output_file = "perturb_eval_runs_new"
+    #
+
+    # RECORD VIDEOS OF PERTURBATIONS
+    gravity_perturbations = [("gravity_z", -16)]
+    friction_perturbations = [("friction", 0.4)]
+    perturbations = gravity_perturbations + friction_perturbations
+    gpu_ids = [0]
+    num_envs = 6
+    run_all_reach = False
+    games_per_env = 1
+    record_seed = 2
     project_prefix = "PERTURBATIONS_"
     termination = False
-    envs_names_list = ["inversion_direction_facing"]
-    output_file = "perturb_eval_runs_new"
+    envs_names_list = [
+        # "inversion_steering",
+        "inversion_direction_facing",
+        # "reach",
+        # "inversion_strike",
+        # "inversion_long_jump"
+    ]
+    output_file = "record_perturb_eval_runs"
+    record_dir = "output/PERTURBATIONS_"
+    record_video = True
     #
 
     out_dir = 'all_runs'
@@ -255,6 +290,10 @@ def generate_perturbations_bash():
     for perturbation_name, perturbation_val in perturbations:
         for prior_only in [False, True]:
             for env_name in envs_names_list:
+                if prior_only and env_name in ["inversion_strike", "inversion_long_jump"]:
+                    continue
+                if perturbation_name == "complex_terrain" and env_name in ["inversion_strike", "inversion_long_jump"]:
+                    continue
                 cmd = generate_cmd(base_dir, cluster_base_dir, env_name, games_per_env, gpu_ids, num_envs,
                                    perturbation_name, perturbation_val, prior_only, project_prefix, record_dir,
                                    record_video, termination, run_all_reach=run_all_reach, record_seed=record_seed)
@@ -268,5 +307,5 @@ def generate_perturbations_bash():
 
 
 if __name__ == '__main__':
-    generate_eval_checkpoints_bash()
-    # generate_perturbations_bash()
+    # generate_eval_checkpoints_bash()
+    generate_perturbations_bash()
