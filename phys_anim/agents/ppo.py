@@ -257,6 +257,7 @@ class PPO:
         if self.config.normalize_values:
             self.running_val_norm.load_state_dict(state_dict["running_val_norm"])
 
+        # TODO: should this be here?
         if self.actor.training:
             self.episode_reward_meter.load_state_dict(state_dict["episode_reward_meter"], strict=False)
             self.episode_length_meter.load_state_dict(state_dict["episode_length_meter"], strict=False)
@@ -911,9 +912,10 @@ class PPO:
                 # success based environment
                 success_mask = self.env._current_successes.to(bool)
             else:
-                success_mask = torch.zeros_like(all_env_ids)
+                success_mask = torch.zeros_like(all_env_ids).to(bool)
             end_episode_mask = self.env.progress_buf == self.env.config.max_episode_length - 1
-            reset_ids = all_env_ids[success_mask | end_episode_mask]
+            terminated = self.env._terminate_buf_copy.to(bool)
+            reset_ids = all_env_ids[success_mask | end_episode_mask | terminated]
             self.env.reset_envs(reset_ids)
         self.eval()
         results = getattr(self.env, 'results')

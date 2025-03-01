@@ -77,6 +77,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
         self.results = {}
         self.console = Console()
 
+        self._terminate_buf_copy = torch.zeros_like(self.terminate_buf)
+
     def accumulate_errors(self):
         self.last_unscaled_rewards = self.log_dict
 
@@ -115,9 +117,11 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     # Handle reset
     ###############################################################
     def reset_envs(self, env_ids):
+        self._terminate_buf_copy[:] = self.terminate_buf.clone()
         super().reset_envs(env_ids)
         if len(env_ids) > 0:
             self.reset_task(env_ids)
+            self._terminate_buf_copy[env_ids] = 0
 
     def reset_task(self, env_ids):
         # Make sure in user-control mode that the history isn't visible.

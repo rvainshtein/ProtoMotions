@@ -51,9 +51,10 @@ class MimicFinetune(MimicVAEDagger):  # TODO inherit from PPO
             if getattr(self.env, "_current_successes", None) is not None:
                 success_mask = self.env._current_successes.to(bool)
             else:
-                success_mask = torch.zeros_like(all_env_ids)
+                success_mask = torch.zeros_like(all_env_ids).to(bool)
             end_episode_mask = self.env.progress_buf == self.env.config.max_episode_length - 1
-            reset_ids = all_env_ids[success_mask | end_episode_mask]
+            terminated = self.env._terminate_buf_copy.to(bool)
+            reset_ids = all_env_ids[success_mask | end_episode_mask | terminated]
             self.env.reset_envs(reset_ids)
         self.eval()
         results = getattr(self.env, 'results')
