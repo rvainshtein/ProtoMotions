@@ -92,7 +92,12 @@ class ExportVideo(RL_EvalCallback):
                 cpu_frames = [f for f in frames]
 
                 # save_dir = self.record_dir / f"{(idx + self.config.index_offset):03d}"
-                save_dir = self.record_dir / self.env.config.experiment_name
+                if self.env.config.get("prior_only"):
+                    split = self.env.config.experiment_name.split("_")
+                    experiment_name_no_seed, seed = '_'.join(split[:-1]), split[-1]
+                    save_dir = self.record_dir / (experiment_name_no_seed + "_prior_only_" + seed)
+                else:
+                    save_dir = self.record_dir / self.env.config.experiment_name
                 save_dir.mkdir(exist_ok=True, parents=True)
 
                 if self.config.store_raw:
