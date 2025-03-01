@@ -118,22 +118,23 @@ def main(config: OmegaConf):
     # find out wandb id and save to config.yaml if 1st run:
     # wandb on rank 0
     resolved_config = OmegaConf.to_container(config, resolve=True)
-    if fabric.global_rank == 0 and not checkpoint_config_path.exists():
+    if fabric.global_rank == 0:
         if "wandb" in config:
             for logger in fabric.loggers:
                 if isinstance(logger, WandbLogger):
                     logger.config = resolved_config  # Log Hydra configuration
                     logger.log_hyperparams(OmegaConf.to_container(config, resolve=True))
-
-                    # saving config with wandb id for next resumed run
-                    wandb_id = wandb.run.id
-                    log.info(f"wandb_id found {wandb_id}")
-                    unresolved_conf["wandb"]["wandb_id"] = wandb_id
+                    if not checkpoint_config_path.exists() and config.get('auto_load_latest', False):
+                        # saving config with wandb id for next resumed run
+                        wandb_id = wandb.run.id
+                        log.info(f"wandb_id found {wandb_id}")
+                        unresolved_conf["wandb"]["wandb_id"] = wandb_id
 
         # only save before 1st run.
         # note, we save unresolved config for easier inference time logic
-        log.info(f"Saving config file to {save_dir}")
-        with open(checkpoint_config_path, "w") as file:
+        version_dir = Path(fabric.loggers[0].root_dir)
+        log.info(f"Saving config file to {version_dir}")
+        with open(version_dir / 'config.yaml', "w") as file:
             OmegaConf.save(unresolved_conf, file)
 
     algo.fabric.strategy.barrier()
