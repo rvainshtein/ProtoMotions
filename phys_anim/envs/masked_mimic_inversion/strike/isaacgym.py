@@ -344,7 +344,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
                                                                           self.enable_success_termination)
 
     def build_sparse_target_object_poses(
-        self, env_ids, raw_future_times, target_directions, target_positions
+            self, env_ids, raw_future_times, target_directions, target_positions
     ):
         """
         This is identical to the max_coords humanoid observation, only in relative to the current pose.
@@ -547,12 +547,12 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         return obs
 
     def build_sparse_target_object_poses_masked_with_time(
-        self, env_ids, num_future_steps, target_directions, target_position
+            self, env_ids, num_future_steps, target_directions, target_position
     ):
         num_envs = len(env_ids)
         time_offsets = (
-            torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
-            * self.dt
+                torch.arange(1, num_future_steps + 1, device=self.device, dtype=torch.long)
+                * self.dt
         )
 
         near_future_times = self.motion_times[env_ids].unsqueeze(-1) + time_offsets.unsqueeze(0)
@@ -605,10 +605,11 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
         ends = self._target_states[..., 0:3]
         verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
 
-        for i, env_ptr in enumerate(self.envs):
-            curr_verts = verts[i]
-            curr_verts = curr_verts.reshape([1, 6])
-            self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
+        if not self.config.get("clean_video", False):
+            for i, env_ptr in enumerate(self.envs):
+                curr_verts = verts[i]
+                curr_verts = curr_verts.reshape([1, 6])
+                self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
 
 
 #####################################################################
