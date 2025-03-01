@@ -150,7 +150,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
     def _set_text_prior(self):
 
-        self.historical_pose_obs_mask[:] = True
+        # self.historical_pose_obs_mask[:] = self._using_text
+        self.historical_pose_obs_mask[:] = False
 
         if self._recompute_text_embedding:
             self._text_embedding = get_text_embedding(self.text_command)
@@ -679,16 +680,16 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
         hands_pos = torch.zeros((num_envs, num_future_steps, 2, 3), device=self.device, dtype=torch.float32)
         hands_dict = {
-            "hands_height": 1.2,
-            "hands_distance": 0.3,
-            "hands_gap": 0.4
+            "hands_distance": 0.1,
+            "hands_gap": 0.1,
+            "hands_height": 0.22,
         }
         hands_pos[..., 0, 0] = hands_dict["hands_distance"]
         hands_pos[..., 0, 1] = hands_dict["hands_gap"] * 1. / 2
         hands_pos[..., 0, 2] = hands_dict["hands_height"]
 
         hands_pos[..., 1, 0] = hands_dict["hands_distance"]
-        hands_pos[..., 1, 1] = -hands_dict["hands_gap"] * 1. / 2
+        hands_pos[..., 1, 1] = -hands_dict["hands_gap"] * -1. / 2
         hands_pos[..., 1, 2] = hands_dict["hands_height"]
 
         if False:
