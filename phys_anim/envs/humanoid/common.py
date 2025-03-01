@@ -910,7 +910,11 @@ class BaseHumanoid(Humanoid):
         rand_col = np.random.uniform(0.0, 1.0, size=3)
         rand_col = range_sum * rand_col / np.linalg.norm(rand_col)
         rand_col += base_col
-        self.set_char_color(rand_col, env_ids)
+        if not self.config.get("clean_video", False):
+            color = rand_col
+        else:
+            color = np.array([200, 120, 200]) / 256.0
+        self.set_char_color(color, env_ids)
 
     def set_char_color(self, rand_col, env_ids):
         raise NotImplementedError

@@ -126,22 +126,32 @@ class MaskedMimicReachHumanoid(BaseMaskedMimicReach, MaskedMimicTaskHumanoid):
             len(self._marker_actor_ids),
         )
 
-        should_reach = (self._tar_reach_steps - self.progress_buf) <= 0
-        for env_idx in range(self.num_envs):
-            if should_reach[env_idx]:
+        if not self.config.get("clean_video", False):
+            should_reach = (self._tar_reach_steps - self.progress_buf) <= 0
+            for env_idx in range(self.num_envs):
+                if should_reach[env_idx]:
+                    self.gym.set_rigid_body_color(
+                        self.envs[env_idx],
+                        self._marker_handles[env_idx],
+                        0,
+                        gymapi.MESH_VISUAL,
+                        gymapi.Vec3(0.0, 0.8, 0.0),
+                    )
+                else:
+                    self.gym.set_rigid_body_color(
+                        self.envs[env_idx],
+                        self._marker_handles[env_idx],
+                        0,
+                        gymapi.MESH_VISUAL,
+                        gymapi.Vec3(0.8, 0.0, 0.0),
+                    )
+        else:
+            for env_idx in range(self.num_envs):
                 self.gym.set_rigid_body_color(
-                    self.envs[env_idx],
-                    self._marker_handles[env_idx],
-                    0,
-                    gymapi.MESH_VISUAL,
-                    gymapi.Vec3(0.0, 0.8, 0.0),
-                )
-            else:
-                self.gym.set_rigid_body_color(
-                    self.envs[env_idx],
-                    self._marker_handles[env_idx],
-                    0,
-                    gymapi.MESH_VISUAL,
+                        self.envs[env_idx],
+                        self._marker_handles[env_idx],
+                        0,
+                        gymapi.MESH_VISUAL,
                     gymapi.Vec3(0.8, 0.0, 0.0),
                 )
 
@@ -159,9 +169,10 @@ class MaskedMimicReachHumanoid(BaseMaskedMimicReach, MaskedMimicTaskHumanoid):
         ends = self._tar_pos.clone()
         verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
 
-        for i, env_ptr in enumerate(self.envs):
-            curr_verts = verts[i]
-            curr_verts = curr_verts.reshape([1, 6])
-            self.gym.add_lines(
-                self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols
-            )
+        if not self.config.get("clean_video", False):
+            for i, env_ptr in enumerate(self.envs):
+                curr_verts = verts[i]
+                curr_verts = curr_verts.reshape([1, 6])
+                self.gym.add_lines(
+                    self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols
+                )
