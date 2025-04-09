@@ -256,37 +256,35 @@ def create_gifs_and_form(drive_folder_id, gif_folder, main_algorithms, n, output
     save_gifs_and_order(gif_folder, video_df)
     upload_gifs_to_drive(gif_folder, drive_folder_id, service_account_file, scopes)
     # === Step 3: Create Google Form ===
-    create_form(video_df, environments_info, service_account_file, scopes, your_email="rvainshtein@gmail.com",
+    create_form(video_df, environments_info, service_account_file, scopes, your_email="your_email",
                 questions_per_env=questions_per_env)
 
 
 def create_single_form():
     # ==== CONFIG ====
-    VIDEO_FOLDER = "../../output/FINALLY_"  # Folder containing input videos
-    # VIDEO_FOLDER = "../../output/old_FINALLY_"  # Folder containing input videos
-    GIF_FOLDER = "gifs_new"  # Folder to save GIFs
+    VIDEO_FOLDER = "path/to/input/videos"  # Folder containing input videos
+    GIF_FOLDER = "path/to/gif/folder"  # Folder to save GIFs
     OUTPUT_CSV = "shuffled_labels.csv"  # Track label order
     QUESTIONS_PER_ENV = 8  # Number of questions per environment
     N = 3  # Number of total algorithms per question (1 main + N-1 others)
-    # DRIVE_FOLDER_ID = "1r241VD5rwHhrigHtF56LQC2c3FgwhkER"  # Folder to upload GIFs to
-    DRIVE_FOLDER_ID = "1CMnGcjvKBMj3Vh2igRSMEUMCfIIovUt1"  # Folder to upload GIFs to
+    DRIVE_FOLDER_ID = "ENTER_DRIVE_FOLDERID_HERE"  # Folder to upload GIFs to
     create_gifs_and_form(DRIVE_FOLDER_ID, GIF_FOLDER, MAIN_ALGORITHMS, N, OUTPUT_CSV, QUESTIONS_PER_ENV, SCOPES,
                          SERVICE_ACCOUNT_FILE, VIDEO_FOLDER, algorithms, environments_info)
 
 
 def create_multi_form():
     # ==== CONFIG ====
-    VIDEO_FOLDER = "../../output/FINALLY_"  # Folder containing input videos
-    OUT_DIR = "final_human_study"
+    VIDEO_FOLDER = "path/to/video/folder"  # Folder containing input videos
+    OUT_DIR = "path/to/out/dir"
     os.makedirs(OUT_DIR, exist_ok=True)
     NUM_FORMS = 3
     GIF_FOLDERS = [os.path.join(OUT_DIR, f"gifs_new_form{i}") for i in range(NUM_FORMS)]  # Folder to save GIFs
     OUTPUT_CSVS = [os.path.join(OUT_DIR, f"shuffled_labels_form{i}.csv") for i in range(NUM_FORMS)]  # Track label order
     QUESTIONS_PER_ENV = 8  # Number of questions per environment
     N = 3  # Number of total algorithms per question (1 main + N-1 others)
-    DRIVE_FOLDER_IDS = ["13CcgPu53yNxFOSs0SqNLFMDOzfkNRmDN",  # form 1
-                        "1ENIJRHawmYaA-Fe_dnYaG_MM0_m5Xw6o",  # form 2
-                        "1YhLZNm_LBxRUa0Sv6NZM3Mx-p2lHYDsm"]  # form 3
+    DRIVE_FOLDER_IDS = ["FORM1_DRIVE_FOLDER_ID",  # form 1
+                        "FORM2_DRIVE_FOLDER_ID",  # form 2
+                        "FORM3_DRIVE_FOLDER_ID"]  # form 3
 
     for GIF_FOLDER, OUTPUT_CSV, DRIVE_FOLDER_ID in zip(GIF_FOLDERS, OUTPUT_CSVS, DRIVE_FOLDER_IDS):
         create_gifs_and_form(DRIVE_FOLDER_ID, GIF_FOLDER, MAIN_ALGORITHMS, N, OUTPUT_CSV, QUESTIONS_PER_ENV, SCOPES,
