@@ -2,7 +2,7 @@ import wandb
 import multiprocessing
 
 # Set your project name here
-PROJECT_NAME = "phys_inversion/eval_results_reach"
+PROJECT_NAME = "task_tokens/eval_results_reach"
 USE_MULTIPROCESSING = True  # Set to False to run sequentially
 
 

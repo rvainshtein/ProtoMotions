@@ -14,8 +14,8 @@ class RunConfig:
 
 @dataclass
 class WandbConfig:
-    entity: str = "phys_inversion"
-    project: str = "chens_runs"
+    entity: str = "task_tokens"
+    project: str = "amp"
 
 
 @dataclass

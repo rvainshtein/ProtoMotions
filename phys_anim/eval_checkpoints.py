@@ -16,7 +16,7 @@ from phys_anim.eval_agent import resolve_config_path
 
 @dataclass
 class WandbConfig:
-    entity: str = "phys_inversion"
+    entity: str = "task_tokens"
     project: str = "eval_results"
 
 
