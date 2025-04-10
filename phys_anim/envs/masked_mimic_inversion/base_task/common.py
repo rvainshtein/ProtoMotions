@@ -126,7 +126,7 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
     ###############################################################
     # Environment step logic
     ###############################################################
-    def create_chens_prior(self, env_ids):
+    def create_hand_crafted_prior(self, env_ids):
         raise NotImplementedError
 
     def compute_observations(self, env_ids=None):
@@ -137,8 +137,8 @@ class BaseMaskedMimicTask(MaskedMimicTaskHumanoid):  # type: ignore[misc]
 
     def compute_priors(self, env_ids):
         self._set_text_prior()
-        if self.config.get("use_chens_prior", False):
-            self.create_chens_prior(env_ids)
+        if self.config.get("use_hand_crafted_prior", False):
+            self.create_hand_crafted_prior(env_ids)
         if self.config.get("raise_hands", False):
             self.condition_type = "raise_hands"
             # self.create_extra_prior(env_ids)

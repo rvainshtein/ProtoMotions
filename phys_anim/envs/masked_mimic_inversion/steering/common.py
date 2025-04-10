@@ -229,7 +229,7 @@ class MaskedMimicBaseDirection(MaskedMimicDirectionHumanoid):  # type: ignore[mi
         self._current_accumulated_errors[turning_envs] = 0
         self._last_length[:] = self.progress_buf[:]
 
-    def create_chens_prior(self, env_ids):
+    def create_hand_crafted_prior(self, env_ids):
         turning_envs = self._heading_turn_steps < 0  # > (self.progress_buf + 15)
         turned_envs = ~turning_envs
 

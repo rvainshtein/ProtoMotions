@@ -180,7 +180,7 @@ class BaseMaskedMimicReach(MaskedMimicReachHumanoid):
         self._current_accumulated_errors[measurement_not_started] = 0
         self._last_length[:] = self.progress_buf[:]
 
-    def create_chens_prior(self, env_ids):
+    def create_hand_crafted_prior(self, env_ids):
         reach_steps_left = (self._tar_reach_steps - self.progress_buf - 10).clamp(
             min=3
         )  # just incase keep above 0 to ensure it isn't hidden

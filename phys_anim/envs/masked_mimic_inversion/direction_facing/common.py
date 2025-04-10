@@ -172,7 +172,7 @@ class MaskedMimicBaseDirectionFacing(MaskedMimicDirectionFacingHumanoid):  # typ
 
         self._heading_turn_steps[env_ids] = (80 * 1 + self.progress_buf[env_ids])  # Allow 15 frames (0.5sec) to turn.
 
-    def create_chens_prior(self, env_ids):
+    def create_hand_crafted_prior(self, env_ids):
         turning_envs = self.progress_buf < 0
         turned_envs = ~turning_envs
         # -10 just to make it reach the orientation slightly before we start measuring.

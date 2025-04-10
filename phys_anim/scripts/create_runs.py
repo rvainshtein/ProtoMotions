@@ -9,7 +9,7 @@ from typing import List
 class RunConfig:
     debug: bool = False
     envs: List[str] = field(default_factory=lambda: ["steering", "direction_facing"])
-    use_chens_prior: List[bool] = field(default_factory=lambda: [True, False])
+    use_hand_crafted_prior: List[bool] = field(default_factory=lambda: [True, False])
     use_text: List[bool] = field(default_factory=lambda: [False])
     use_current_pose_obs: List[bool] = field(default_factory=lambda: [True])
     use_bigger_model: List[bool] = field(default_factory=lambda: [True])
@@ -50,7 +50,7 @@ def main(cfg: DictConfig):
 
     # create runs for each combination of hyperparameters
     for env in cfg.training.envs:
-        for prior_flag in cfg.training.use_chens_prior:
+        for prior_flag in cfg.training.use_hand_crafted_prior:
             for text_flag in cfg.training.use_text:
                 for current_pose in cfg.training.use_current_pose_obs:
                     for bigger_model in cfg.training.use_bigger_model:
@@ -80,7 +80,7 @@ def main(cfg: DictConfig):
                                     f" experiment_name={current_experiment_name}" + "_${seed}" +
                                     f" ++clean_exp_name={algo_type}_{current_experiment_name}"
                             )
-                            current_extra_args += [f"env.config.use_chens_prior={prior_flag}"]
+                            current_extra_args += [f"env.config.use_hand_crafted_prior={prior_flag}"]
                             current_extra_args += [f"env.config.use_text={text_flag}"]
                             if current_pose:
                                 current_opts += ["masked_mimic/inversion/current_pose_obs"]

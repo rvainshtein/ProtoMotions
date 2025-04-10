@@ -116,7 +116,7 @@ def main(config: DictConfig):
         print("Using prior only, make sure checkpoint is an inversion model.")
         config.opt.append("masked_mimic/inversion/disable_inversion_obs")
         config.more_options += (
-            " +env.config.use_chens_prior=True"
+            " +env.config.use_hand_crafted_prior=True"
             " +env.config.prior_only=True"
             " ++algo_type=MaskedMimic_Prior_Only"
             " ++bigger=null"

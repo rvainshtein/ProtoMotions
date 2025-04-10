@@ -68,7 +68,7 @@ class MaskedMimicStrike(MaskedMimicTaskHumanoid):
 
         super().create_envs(num_envs, spacing, num_per_row)
 
-    def create_chens_prior(self, env_ids):
+    def create_hand_crafted_prior(self, env_ids):
         if env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
         num_envs = len(env_ids)
