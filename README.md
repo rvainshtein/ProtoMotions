@@ -1,4 +1,56 @@
-# ProtoMotions: Physics-based Character Animation
+# Task Tokens: A Flexible Approach to Adapting Behavior Foundation Models
+[Ron Vainshtein](https://www.linkedin.com/in/ron-vainshtein-284038192/), [Zohar Rimon](https://zoharri.github.io/), [Shie Mannor](https://webee.technion.ac.il/Sites/People/shie/), [Chen Tessler](https://research.nvidia.com/person/chen-tessler)
+
+[[**Paper**](https://www.arxiv.org/abs/2503.22886)] [[**Project**](https://sites.google.com/view/task-tokens)] [[**Cite**](#citing-task-tokens)]
+
+We introduce **Task Tokens**, a method to effectively tailor behavior foundation models (BFMs) to specific tasks while preserving their flexibility.
+Our approach leverages the transformer architecture of BFMs to learn a new task-specific encoder through reinforcement learning, keeping the original BFM frozen.
+This allows incorporation of user-defined priors, balancing reward design and prompt engineering.
+By training a task encoder to map observations to tokens, used as additional BFM inputs, we guide performance improvement while maintaining the model's diverse control characteristics. We demonstrate Task Tokens' efficacy across various tasks, including out-of-distribution scenarios, and show their compatibility with other prompting modalities. Our results suggest that Task Tokens offer a promising approach for adapting BFMs to specific control tasks while retaining their generalization capabilities.
+
+## ProtoMotions
+This repository builds on top of [Proto Motion](https://github.com/NVlabs/ProtoMotions). 
+For full details, installation instructions, and usage, please refer to the original readme below.
+
+# Training with Task Tokens
+To train on a task with Task Tokens you can either use the original train_agent.py script or the new train_task_tokens.py script (see details below) or use scripts/create_runs.py to generate multiple runs in a bash file.
+
+For example, to train an agent with Task Tokens on the steering environment, run:
+
+```bash
+python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +exp=inversion/steering experiment_name=example_experiment +opt=[full_run,wdb] wandb.wandb_entity=task_tokens wandb.wandb_project=example_run num_envs=512 algo.config.batch_size=2048 base_dir=/path/to/base/dir/ algo.config.max_epochs=4000 algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]```
+```
+
+
+# Evaluation
+To evaluate a trained agent (or multiple agents), you can use the phys_anim/eval_checkpoints.py script.
+This will run multiple episodes and report evaluation metrics to wandb.
+
+You can also use this script to record videos of the agent in action by setting the `record_video` flag to `True`.
+## Perturbations
+To evaluate whether the agent is robust to perturbations, we provide a set of perturbations that can be applied to the environment.
+Just set the `use_perturbations` flag to `True` and add the perturbation you want to apply.
+
+For example to evaluate the agent on a perturbed environment with gravity set to -14, run:
+
+```bash
+python phys_anim/eval_checkpoints.py +checkpoint_paths_glob=/path/to/last.ckpt +gpu_ids=[0] +num_envs=10 +games_per_env=1 +wandb.project=perturbation_example +use_perturbations=True +perturbations.gravity_z=-14
+```
+
+
+# Citing Task Tokens
+If you use Task Tokens in your research, please consider citing our paper:
+```bibtex
+@article{vainshtein2025tasktokens,
+  title={Task Tokens: A Flexible Approach to Adapting Behavior Foundation Models},
+  author={Ron Vainshtein and Zohar Rimon and Shie Mannor and Chen Tessler},
+  journal={arXiv preprint arXiv:2503.22886},
+  url={https://arxiv.org/abs/2503.22886},
+  year={2025}
+}
+```
+
+# ProtoMotions Readme
 *“Primitive or fundamental types of movement that serve as a basis for more complex motions.”*
 
 - [What is this?](#what-is-this)
