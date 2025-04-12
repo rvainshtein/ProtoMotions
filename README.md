@@ -8,6 +8,11 @@ Our approach leverages the transformer architecture of BFMs to learn a new task-
 This allows incorporation of user-defined priors, balancing reward design and prompt engineering.
 By training a task encoder to map observations to tokens, used as additional BFM inputs, we guide performance improvement while maintaining the model's diverse control characteristics. We demonstrate Task Tokens' efficacy across various tasks, including out-of-distribution scenarios, and show their compatibility with other prompting modalities. Our results suggest that Task Tokens offer a promising approach for adapting BFMs to specific control tasks while retaining their generalization capabilities.
 
+
+<div float="center">
+    <img src="assets/archtasktokens.png" width="900"/>
+</div>
+
 ## ProtoMotions
 This repository builds on top of [Proto Motion](https://github.com/NVlabs/ProtoMotions). 
 For full details, installation instructions, and usage, please refer to the original readme below.
@@ -21,6 +26,10 @@ For example, to train an agent with Task Tokens on the steering environment, run
 python phys_anim/train_agent.py +robot=smpl +backbone=isaacgym +exp=inversion/steering experiment_name=example_experiment +opt=[full_run,wdb] wandb.wandb_entity=task_tokens wandb.wandb_project=example_run num_envs=512 algo.config.batch_size=2048 base_dir=/path/to/base/dir/ algo.config.max_epochs=4000 algo.config.models.extra_input_model_for_transformer.config.units=[512,512,512]```
 ```
 
+Supported tasks (for full details see our paper/website):
+<div float="center">
+    <img src="assets/supportedTasks.png" width="900"/>
+</div>
 
 # Evaluation
 To evaluate a trained agent (or multiple agents), you can use the phys_anim/eval_checkpoints.py script.
@@ -36,7 +45,14 @@ For example to evaluate the agent on a perturbed environment with gravity set to
 ```bash
 python phys_anim/eval_checkpoints.py +checkpoint_paths_glob=/path/to/last.ckpt +gpu_ids=[0] +num_envs=10 +games_per_env=1 +wandb.project=perturbation_example +use_perturbations=True +perturbations.gravity_z=-14
 ```
+Training with gravity set to [-14, -16, -18, -20] in the steering environment:
 
+<div float="center">
+    <img src="assets/grav14.gif" width="300"/>
+    <img src="assets/grav16.gif" width="300"/>
+    <img src="assets/grav18.gif" width="300"/>
+    <img src="assets/grav20.gif" width="300"/>
+</div>
 
 # Citing Task Tokens
 If you use Task Tokens in your research, please consider citing our paper:
